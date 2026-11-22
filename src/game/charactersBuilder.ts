@@ -302,17 +302,6 @@ export interface CrewAndLifeboatOptions {
   boatZStations?: number[];
   boatBaseX?: number;
   deckBoundsZ?: [number, number];
-  bridgeDeckY?: number;
-  boatDeckY?: number;
-  promenadeDeckY?: number;
-  wellDeckY?: number;
-  forecastleDeckY?: number;
-  aftDeckY?: number;
-  poopDeckY?: number;
-  crowsNestY?: number;
-  crowsNestZ?: number;
-  davitDeckY?: number;
-  lifeboatHullColorHex?: number;
 }
 
 export function createCrewAndLifeboats(
@@ -328,16 +317,6 @@ export function createCrewAndLifeboats(
   const scaleZ = options?.scaleZ ?? 1.0;
   const boatBaseX = options?.boatBaseX ?? 12.95 * scaleX;
   const deckBoundsZ = options?.deckBoundsZ ?? [-78, 200];
-  const bridgeDeckY = options?.bridgeDeckY ?? 13.06;
-  const boatDeckY = options?.boatDeckY ?? 12.88;
-  const promenadeDeckY = options?.promenadeDeckY ?? 9.86;
-  const wellDeckY = options?.wellDeckY ?? 6.62;
-  const forecastleDeckY = options?.forecastleDeckY ?? 9.2;
-  const aftDeckY = options?.aftDeckY ?? 10.52;
-  const poopDeckY = options?.poopDeckY ?? 8.4;
-  const crowsNestY = options?.crowsNestY ?? 25.4;
-  const crowsNestZ = options?.crowsNestZ ?? -22.5;
-  const davitDeckY = options?.davitDeckY ?? 12.84;
   const boatZStations = options?.boatZStations ?? [8.5, 18.2, 27.9, 37.6, 102.0, 111.7, 121.4, 131.1];
   const fwdBoatZ = boatZStations.slice(0, 4);
   const aftBoatZ = boatZStations.slice(4, 8);
@@ -412,10 +391,6 @@ export function createCrewAndLifeboats(
   const instClothMat = trackMat(makePBR('char_instCloth', { color: 0xffffff, roughness: 0.74, metallic: 0.04, envIntensity: 0.32 }));
   const instSkinMat = trackMat(makePBR('char_instSkin', { color: 0xffffff, roughness: 0.68, metallic: 0.01, envIntensity: 0.3 }));
   const instHairMat = trackMat(makePBR('char_instHair', { color: 0xffffff, roughness: 0.85, metallic: 0.01, envIntensity: 0.25 }));
-  const lifeboatHullMat: THREE.Material =
-    options?.lifeboatHullColorHex !== undefined
-      ? trackMat(makePBR('char_lifeboatSolas', { color: options.lifeboatHullColorHex, roughness: 0.44, metallic: 0.08, envIntensity: 0.38 }))
-      : whitePaintMat;
 
   // =========================================================================
   // SCULPTED ANATOMICAL TEMPLATE MESHES (Cloned / Instanced into Hero & Crowd)
@@ -899,150 +874,150 @@ export function createCrewAndLifeboats(
   const qmOfficer = spawnCharacter(
     'officer',
     [
-      { x: 1.55, y: bridgeDeckY, z: -0.35, pauseSec: 2.2 },
-      { x: 1.65, y: bridgeDeckY, z: 0.75, pauseSec: 1.6 },
-      { x: 0.95, y: bridgeDeckY, z: 0.85, pauseSec: 2.5 },
+      { x: 1.55, y: 13.06, z: -0.35, pauseSec: 2.2 },
+      { x: 1.65, y: 13.06, z: 0.75, pauseSec: 1.6 },
+      { x: 0.95, y: 13.06, z: 0.85, pauseSec: 2.5 },
     ],
     'walk',
     0,
     null,
     0.2,
   );
-  qmOfficer.helmStation = { x: -0.4, y: bridgeDeckY, z: 0.62, yaw: -0.22, role: 'helmsman' };
+  qmOfficer.helmStation = { x: -0.4, y: 13.06, z: 0.62, yaw: -0.22, role: 'helmsman' };
 
   const bridgeWatchOfficer = spawnCharacter(
     'officer',
     [
-      { x: -1.45, y: bridgeDeckY, z: 0.1, pauseSec: 2.4 },
-      { x: -1.9, y: bridgeDeckY, z: 1.4, pauseSec: 2.0 },
+      { x: -1.45, y: 13.06, z: 0.1, pauseSec: 2.4 },
+      { x: -1.9, y: 13.06, z: 1.4, pauseSec: 2.0 },
     ],
     'walk',
     1,
     null,
     -0.2,
   );
-  bridgeWatchOfficer.helmStation = { x: 0.86, y: bridgeDeckY, z: 0.16, yaw: 0.08, role: 'watch_officer' };
+  bridgeWatchOfficer.helmStation = { x: 0.86, y: 13.06, z: 0.16, yaw: 0.08, role: 'watch_officer' };
 
   // 3-4: Port & Starboard Bridge Wing Officers
   const stbdWingOfficer = spawnCharacter(
     'officer',
     [
-      { x: 7.4, y: bridgeDeckY, z: -0.5, pauseSec: 1.4 },
-      { x: 14.3, y: bridgeDeckY, z: -0.5, pauseSec: 2.8 },
+      { x: 7.4, y: 13.06, z: -0.5, pauseSec: 1.4 },
+      { x: 14.3, y: 13.06, z: -0.5, pauseSec: 2.8 },
     ],
     'walk',
     2,
-    { x: 11.4, y: boatDeckY, z: 9.0 },
+    { x: 11.4, y: 12.88, z: 9.0 },
   );
-  stbdWingOfficer.bowTarget = mapWp({ x: 10.6, y: boatDeckY, z: -7.5, pauseSec: 0 });
+  stbdWingOfficer.bowTarget = mapWp({ x: 10.6, y: 12.88, z: -7.5, pauseSec: 0 });
 
   const portWingOfficer = spawnCharacter(
     'officer',
     [
-      { x: -7.4, y: bridgeDeckY, z: -0.5, pauseSec: 1.6 },
-      { x: -14.3, y: bridgeDeckY, z: -0.5, pauseSec: 2.5 },
+      { x: -7.4, y: 13.06, z: -0.5, pauseSec: 1.6 },
+      { x: -14.3, y: 13.06, z: -0.5, pauseSec: 2.5 },
     ],
     'walk',
     3,
-    { x: -11.4, y: boatDeckY, z: 9.0 },
+    { x: -11.4, y: 12.88, z: 9.0 },
   );
-  portWingOfficer.bowTarget = mapWp({ x: -10.6, y: boatDeckY, z: -7.5, pauseSec: 0 });
+  portWingOfficer.bowTarget = mapWp({ x: -10.6, y: 12.88, z: -7.5, pauseSec: 0 });
 
-  // 5-6: Crow's Nest / Masthead Lookouts
-  spawnCharacter('lookout', [{ x: -0.3, y: crowsNestY, z: crowsNestZ - 0.05 }], 'idle', 0, null, 0.08);
-  spawnCharacter('lookout', [{ x: 0.3, y: crowsNestY, z: crowsNestZ + 0.05 }], 'idle', 1, null, -0.08);
+  // 5-6: Crow's Nest Lookouts
+  spawnCharacter('lookout', [{ x: -0.3, y: 25.4, z: -22.55 }], 'idle', 0, null, 0.08);
+  spawnCharacter('lookout', [{ x: 0.3, y: 25.4, z: -22.45 }], 'idle', 1, null, -0.08);
 
   // 7-8: Forecastle Anchor Watch Crewmen
   const bowWatchPort = spawnCharacter(
     'officer',
     [
-      { x: -2.2, y: forecastleDeckY, z: -56.0, pauseSec: 2.0 },
-      { x: -5.4, y: forecastleDeckY, z: -38.0, pauseSec: 1.5 },
+      { x: -2.2, y: 9.2, z: -56.0, pauseSec: 2.0 },
+      { x: -5.4, y: 9.2, z: -38.0, pauseSec: 1.5 },
     ],
     'walk',
     4,
-    { x: -9.5, y: boatDeckY, z: 10.0 },
+    { x: -9.5, y: 12.88, z: 10.0 },
   );
-  bowWatchPort.bowTarget = mapWp({ x: -1.65, y: forecastleDeckY + 0.82, z: -69.2, pauseSec: 0 });
+  bowWatchPort.bowTarget = mapWp({ x: -1.65, y: 10.02, z: -69.2, pauseSec: 0 });
 
   const bowWatchStbd = spawnCharacter(
     'officer',
     [
-      { x: 2.2, y: forecastleDeckY, z: -59.0, pauseSec: 2.2 },
-      { x: 5.2, y: forecastleDeckY, z: -39.0, pauseSec: 1.8 },
+      { x: 2.2, y: 9.2, z: -59.0, pauseSec: 2.2 },
+      { x: 5.2, y: 9.2, z: -39.0, pauseSec: 1.8 },
     ],
     'walk',
     5,
-    { x: 9.5, y: boatDeckY, z: 10.0 },
+    { x: 9.5, y: 12.88, z: 10.0 },
   );
-  bowWatchStbd.bowTarget = mapWp({ x: 1.65, y: forecastleDeckY + 0.82, z: -69.2, pauseSec: 0 });
+  bowWatchStbd.bowTarget = mapWp({ x: 1.65, y: 10.02, z: -69.2, pauseSec: 0 });
 
   // 9-10: Aft Docking Bridge Watch Officers
   spawnCharacter(
     'officer',
     [
-      { x: -4.8, y: aftDeckY, z: 172.5, pauseSec: 2.4 },
-      { x: 4.8, y: aftDeckY, z: 172.5, pauseSec: 2.4 },
+      { x: -4.8, y: 10.52, z: 172.5, pauseSec: 2.4 },
+      { x: 4.8, y: 10.52, z: 172.5, pauseSec: 2.4 },
     ],
     'walk',
     6,
-    { x: -9.5, y: boatDeckY, z: 130.0 },
+    { x: -9.5, y: 12.88, z: 130.0 },
   );
   spawnCharacter(
     'officer',
     [
-      { x: 1.6, y: aftDeckY, z: 172.4, pauseSec: 3.0 },
-      { x: -1.6, y: aftDeckY, z: 172.6, pauseSec: 2.8 },
+      { x: 1.6, y: 10.52, z: 172.4, pauseSec: 3.0 },
+      { x: -1.6, y: 10.52, z: 172.6, pauseSec: 2.8 },
     ],
     'walk',
     7,
-    { x: 9.5, y: boatDeckY, z: 130.0 },
+    { x: 9.5, y: 12.88, z: 130.0 },
   );
 
   // 11-14: Boat Deck Quartermasters
   const fwdQmStbd = spawnCharacter(
     'officer',
     [
-      { x: 11.1, y: boatDeckY, z: 9.0, pauseSec: 1.8 },
-      { x: 11.1, y: boatDeckY, z: 36.5, pauseSec: 1.8 },
+      { x: 11.1, y: 12.88, z: 9.0, pauseSec: 1.8 },
+      { x: 11.1, y: 12.88, z: 36.5, pauseSec: 1.8 },
     ],
     'walk',
     8,
-    { x: 11.4, y: boatDeckY, z: 18.2 },
+    { x: 11.4, y: 12.88, z: 18.2 },
   );
-  fwdQmStbd.bowTarget = mapWp({ x: 10.2, y: boatDeckY, z: 3.8, pauseSec: 0 });
+  fwdQmStbd.bowTarget = mapWp({ x: 10.2, y: 12.88, z: 3.8, pauseSec: 0 });
 
   const fwdQmPort = spawnCharacter(
     'officer',
     [
-      { x: -11.1, y: boatDeckY, z: 36.5, pauseSec: 1.8 },
-      { x: -11.1, y: boatDeckY, z: 9.0, pauseSec: 1.8 },
+      { x: -11.1, y: 12.88, z: 36.5, pauseSec: 1.8 },
+      { x: -11.1, y: 12.88, z: 9.0, pauseSec: 1.8 },
     ],
     'walk',
     9,
-    { x: -11.4, y: boatDeckY, z: 18.2 },
+    { x: -11.4, y: 12.88, z: 18.2 },
   );
-  fwdQmPort.bowTarget = mapWp({ x: -10.2, y: boatDeckY, z: 3.8, pauseSec: 0 });
+  fwdQmPort.bowTarget = mapWp({ x: -10.2, y: 12.88, z: 3.8, pauseSec: 0 });
 
   spawnCharacter(
     'officer',
     [
-      { x: 11.1, y: boatDeckY, z: 102.0, pauseSec: 1.8 },
-      { x: 11.1, y: boatDeckY, z: 130.0, pauseSec: 1.8 },
+      { x: 11.1, y: 12.88, z: 102.0, pauseSec: 1.8 },
+      { x: 11.1, y: 12.88, z: 130.0, pauseSec: 1.8 },
     ],
     'walk',
     10,
-    { x: 11.4, y: boatDeckY, z: 111.7 },
+    { x: 11.4, y: 12.88, z: 111.7 },
   );
   spawnCharacter(
     'officer',
     [
-      { x: -11.1, y: boatDeckY, z: 130.0, pauseSec: 1.8 },
-      { x: -11.1, y: boatDeckY, z: 102.0, pauseSec: 1.8 },
+      { x: -11.1, y: 12.88, z: 130.0, pauseSec: 1.8 },
+      { x: -11.1, y: 12.88, z: 102.0, pauseSec: 1.8 },
     ],
     'walk',
     11,
-    { x: -11.4, y: boatDeckY, z: 111.7 },
+    { x: -11.4, y: 12.88, z: 111.7 },
   );
 
   // =========================================================================
@@ -1118,13 +1093,13 @@ export function createCrewAndLifeboats(
       fwdSeeds.push({
         kind,
         startX: mapX(x0),
-        startY: boatDeckY,
+        startY: 12.88,
         startZ: mapZ(z0),
         endX: mapX(x1),
-        endY: boatDeckY,
+        endY: 12.88,
         endZ: mapZ(z1),
         musterX: mapX(mSide * (10.5 + rand() * 1.1)),
-        musterY: boatDeckY,
+        musterY: 12.88,
         musterZ: boatZ + (rand() - 0.5) * 4.4,
         isWalker: rand() < 0.52,
         facingYaw: rand() * Math.PI * 2,
@@ -1138,13 +1113,13 @@ export function createCrewAndLifeboats(
       fwdSeeds.push({
         kind,
         startX: mapX(laneX),
-        startY: boatDeckY,
+        startY: 12.88,
         startZ: mapZ(z0),
         endX: mapX(side * (7.6 + rand() * 3.5)),
-        endY: boatDeckY,
+        endY: 12.88,
         endZ: mapZ(z1),
         musterX: mapX(side * (10.4 + rand() * 1.2)),
-        musterY: boatDeckY,
+        musterY: 12.88,
         musterZ: boatZ + (rand() - 0.5) * 4.4,
         isWalker: rand() < 0.68,
         facingYaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
@@ -1161,13 +1136,13 @@ export function createCrewAndLifeboats(
     fwdSeeds.push({
       kind,
       startX: mapX(x0),
-      startY: promenadeDeckY,
+      startY: 9.86,
       startZ: mapZ(z0),
       endX: mapX(side * (11.95 + rand() * 0.9)),
-      endY: promenadeDeckY,
+      endY: 9.86,
       endZ: mapZ(z1),
       musterX: mapX(side * (12.1 + rand() * 0.8)),
-      musterY: promenadeDeckY,
+      musterY: 9.86,
       musterZ: mapZ(MathUtils.lerp(6, 44, rand())),
       isWalker: rand() < 0.65,
       facingYaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
@@ -1190,13 +1165,13 @@ export function createCrewAndLifeboats(
     fwdSeeds.push({
       kind,
       startX: mapX(x0),
-      startY: wellDeckY,
+      startY: 6.62,
       startZ: mapZ(z0),
       endX: mapX(x1),
-      endY: wellDeckY,
+      endY: 6.62,
       endZ: mapZ(z1),
       musterX: mapX(mSide * (11.8 + rand() * 0.9)),
-      musterY: promenadeDeckY,
+      musterY: 9.86,
       musterZ: mapZ(MathUtils.lerp(-4, 24, rand())),
       isWalker: rand() < 0.58,
       facingYaw: rand() * Math.PI * 2,
@@ -1219,13 +1194,13 @@ export function createCrewAndLifeboats(
     fwdSeeds.push({
       kind,
       startX: mapX(x0),
-      startY: forecastleDeckY,
+      startY: 9.2,
       startZ: mapZ(z0),
       endX: mapX(x1),
-      endY: forecastleDeckY,
+      endY: 9.2,
       endZ: mapZ(z1),
       musterX: mapX((x0 >= 0 ? 1 : -1) * (8.2 + rand() * 2.4)),
-      musterY: forecastleDeckY,
+      musterY: 9.2,
       musterZ: mapZ(MathUtils.lerp(-44, -37, rand())),
       isWalker: rand() < 0.5,
       facingYaw: rand() * Math.PI * 2,
@@ -1246,17 +1221,17 @@ export function createCrewAndLifeboats(
       aftSeeds.push({
         kind,
         startX: mapX(x0),
-        startY: boatDeckY,
+        startY: 12.88,
         startZ: mapZ(z0),
         endX: mapX(
           zMin < 120
             ? cSide * MathUtils.lerp(5.8, 10.8, rand())
             : MathUtils.clamp(x0 + (rand() - 0.5) * 7, -10.8, 10.8),
         ),
-        endY: boatDeckY,
+        endY: 12.88,
         endZ: mapZ(MathUtils.lerp(zMin, zMax, rand())),
         musterX: mapX((x0 >= 0 ? 1 : -1) * (10.5 + rand() * 1.1)),
-        musterY: boatDeckY,
+        musterY: 12.88,
         musterZ: boatZ + (rand() - 0.5) * 4.2,
         isWalker: rand() < 0.55,
         facingYaw: rand() * Math.PI * 2,
@@ -1267,13 +1242,13 @@ export function createCrewAndLifeboats(
       aftSeeds.push({
         kind,
         startX: mapX(side * (7.3 + rand() * 3.8)),
-        startY: boatDeckY,
+        startY: 12.88,
         startZ: mapZ(z0),
         endX: mapX(side * (7.3 + rand() * 3.8)),
-        endY: boatDeckY,
+        endY: 12.88,
         endZ: mapZ(z1),
         musterX: mapX(side * (10.4 + rand() * 1.2)),
-        musterY: boatDeckY,
+        musterY: 12.88,
         musterZ: boatZ + (rand() - 0.5) * 4.2,
         isWalker: rand() < 0.66,
         facingYaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
@@ -1289,13 +1264,13 @@ export function createCrewAndLifeboats(
     aftSeeds.push({
       kind,
       startX: mapX(side * (11.95 + rand() * 0.85)),
-      startY: promenadeDeckY,
+      startY: 9.86,
       startZ: mapZ(z0),
       endX: mapX(side * (11.95 + rand() * 0.85)),
-      endY: promenadeDeckY,
+      endY: 9.86,
       endZ: mapZ(z1),
       musterX: mapX(side * (12.1 + rand() * 0.8)),
-      musterY: promenadeDeckY,
+      musterY: 9.86,
       musterZ: mapZ(MathUtils.lerp(100, 134, rand())),
       isWalker: rand() < 0.64,
       facingYaw: side > 0 ? -Math.PI / 2 : Math.PI / 2,
@@ -1310,13 +1285,13 @@ export function createCrewAndLifeboats(
     aftSeeds.push({
       kind,
       startX: mapX(x0),
-      startY: wellDeckY,
+      startY: 6.62,
       startZ: mapZ(z0),
       endX: mapX(side * (4.3 + rand() * 5.2)),
-      endY: wellDeckY,
+      endY: 6.62,
       endZ: mapZ(MathUtils.clamp(z0 + (rand() - 0.5) * 12, 149.2, 168.5)),
       musterX: mapX(side * (11.8 + rand() * 0.8)),
-      musterY: promenadeDeckY,
+      musterY: 9.86,
       musterZ: mapZ(MathUtils.lerp(126, 143, rand())),
       isWalker: rand() < 0.56,
       facingYaw: rand() * Math.PI * 2,
@@ -1336,13 +1311,13 @@ export function createCrewAndLifeboats(
     aftSeeds.push({
       kind,
       startX: mapX(x0),
-      startY: poopDeckY,
+      startY: 8.4,
       startZ: mapZ(z0),
       endX: mapX(x1),
-      endY: poopDeckY,
+      endY: 8.4,
       endZ: mapZ(z1),
       musterX: mapX((x0 >= 0 ? 1 : -1) * (4.0 + rand() * 3.6)),
-      musterY: poopDeckY,
+      musterY: 8.4,
       musterZ: mapZ(MathUtils.lerp(174.5, 184.0, rand())),
       isWalker: rand() < 0.52,
       facingYaw: rand() * Math.PI * 2,
@@ -1396,29 +1371,29 @@ export function createCrewAndLifeboats(
           const railX = Math.max(0.65, beam * (1 + flare) - 0.85);
           const sheerT = MathUtils.clamp((-35 - zBow / scaleZ) / 39, 0, 1);
           bowPanicX = bSide * MathUtils.clamp(railX - rand() * 0.75, 0.45, railX);
-          bowPanicY = forecastleDeckY - 0.04 + sheerT * 1.02;
+          bowPanicY = 9.16 + sheerT * 1.02;
           bowPanicZ = zBow;
           bowPanicYaw = Math.atan2(-bSide * 0.75, 0.66);
         } else if (i % 3 === 1) {
           bowPanicX = bSide * MathUtils.lerp(8.2, 11.4, rand()) * scaleX;
-          bowPanicY = wellDeckY;
+          bowPanicY = 6.62;
           bowPanicZ = MathUtils.lerp(-32.0, -12.5, rand()) * scaleZ;
           bowPanicYaw = Math.atan2(-bSide * 0.5, 0.85);
         } else {
           bowPanicX = bSide * MathUtils.lerp(8.2, 11.8, rand()) * scaleX;
-          bowPanicY = boatDeckY;
+          bowPanicY = 12.88;
           bowPanicZ = MathUtils.lerp(3.5, 17.5, rand()) * scaleZ;
           bowPanicYaw = Math.atan2(-bSide * 0.35, 0.94);
         }
       } else {
         const bSide = s.startX >= 0 ? 1 : -1;
-        if (s.startY >= boatDeckY - 0.5) {
+        if (s.startY > 11.0) {
           bowPanicX = bSide * MathUtils.lerp(7.2, 11.4, rand()) * scaleX;
-          bowPanicY = boatDeckY;
+          bowPanicY = 12.88;
           bowPanicZ = MathUtils.lerp(91.5, 101.0, rand()) * scaleZ;
-        } else if (s.startY >= promenadeDeckY - 0.5) {
+        } else if (s.startY > 9.0) {
           bowPanicX = bSide * MathUtils.lerp(11.6, 12.8, rand()) * scaleX;
-          bowPanicY = promenadeDeckY;
+          bowPanicY = 9.86;
           bowPanicZ = MathUtils.lerp(91.5, 102.0, rand()) * scaleZ;
         } else {
           bowPanicX = bSide * MathUtils.lerp(3.8, 9.2, rand()) * scaleX;
@@ -1788,8 +1763,8 @@ export function createCrewAndLifeboats(
     _gridHead.fill(-1);
     for (let i = 0; i < n; i++) {
       const a = actors[i];
-      const col = Math.max(0, Math.min(GRID_COLS - 1, Math.floor((a.posX + 21) / 3.5)));
-      const row = Math.max(0, Math.min(GRID_ROWS - 1, Math.floor((a.posZ + 84) / 3.2)));
+      const col = Math.max(0, Math.min(GRID_COLS - 1, Math.floor((a.posX + 18) / 3)));
+      const row = Math.max(0, Math.min(GRID_ROWS - 1, Math.floor((a.posZ + 78) / 3)));
       const cell = row * GRID_COLS + col;
       _gridNext[i] = _gridHead[cell];
       _gridHead[cell] = i;
@@ -1802,8 +1777,8 @@ export function createCrewAndLifeboats(
       let moving = false;
       let waving = false;
 
-      const col0 = Math.max(0, Math.min(GRID_COLS - 1, Math.floor((a.posX + 21) / 3.5)));
-      const row0 = Math.max(0, Math.min(GRID_ROWS - 1, Math.floor((a.posZ + 84) / 3.2)));
+      const col0 = Math.max(0, Math.min(GRID_COLS - 1, Math.floor((a.posX + 18) / 3)));
+      const row0 = Math.max(0, Math.min(GRID_ROWS - 1, Math.floor((a.posZ + 78) / 3)));
       let avoidX = 0;
       let avoidZ = 0;
       let nearestPeerDist = 99;
@@ -2084,12 +2059,12 @@ export function createCrewAndLifeboats(
 
       const makeDavitArm = (dz: number) => {
         const rack = clonePart(davitRackProto, `lb_${side}_${b}_rack_${dz}`, officerNavyMat, homeParent);
-        rack.position.set(side * davitRackX, davitDeckY + 0.08, bz + dz);
+        rack.position.set(side * davitRackX, 12.92, bz + dz);
 
         const arm = new THREE.Group();
         arm.name = `lb_${side}_${b}_davit_${dz}`;
         homeParent.add(arm);
-        arm.position.set(side * davitArmX, davitDeckY, bz + dz);
+        arm.position.set(side * davitArmX, 12.84, bz + dz);
 
         const sector = clonePart(davitSectorProto, `lb_${side}_${b}_sec_${dz}`, whitePaintMat, arm);
         sector.position.y = 0.08;
@@ -2112,7 +2087,7 @@ export function createCrewAndLifeboats(
       for (const cz of [-1.75, 1.75]) {
         const chock = clonePart(thwartProto, `lb_${side}_${b}_chock_${cz}`, teakDeckMat, homeParent);
         chock.scale.set(0.85, 9.5, 0.72);
-        chock.position.set(side * boatBaseX, davitDeckY + 0.31, bz + cz);
+        chock.position.set(side * boatBaseX, 13.15, bz + cz);
       }
 
       const isEmergencyCutter = b === 0;
@@ -2122,20 +2097,20 @@ export function createCrewAndLifeboats(
       davitAftArm.rotation.z = -side * initSwing;
 
       const ropeFore = clonePart(ropeProto, `lb_${side}_${b}_ropeF`, ropeMat, homeParent);
-      ropeFore.position.set(initBoatX, davitDeckY + 1.68, bz - 2.65);
+      ropeFore.position.set(initBoatX, 14.52, bz - 2.65);
       ropeFore.scale.set(1, 0.92, 1);
 
       const ropeAft = clonePart(ropeProto, `lb_${side}_${b}_ropeA`, ropeMat, homeParent);
-      ropeAft.position.set(initBoatX, davitDeckY + 1.68, bz + 2.65);
+      ropeAft.position.set(initBoatX, 14.52, bz + 2.65);
       ropeAft.scale.set(1, 0.92, 1);
 
       const boatGroup = new THREE.Group();
       boatGroup.name = `lb_${side}_${b}_boat`;
       homeParent.add(boatGroup);
-      boatGroup.position.set(initBoatX, davitDeckY + 1.01, bz);
+      boatGroup.position.set(initBoatX, 13.85, bz);
       rootGroups.push(boatGroup);
 
-      const hull = clonePart(boatHullProto, `lb_${side}_${b}_hull`, lifeboatHullMat, boatGroup);
+      const hull = clonePart(boatHullProto, `lb_${side}_${b}_hull`, whitePaintMat, boatGroup);
       shadowCasters.push(hull);
 
       const keel = clonePart(keelProto, `lb_${side}_${b}_keel`, teakDeckMat, boatGroup);
@@ -2574,7 +2549,7 @@ export function createCrewAndLifeboats(
         }
       } else {
         const dropBelowDavit = Math.max(0, davitTopWorldY - targetBoatWorldY);
-        const localY = Math.min(davitDeckY + 1.01, davitDeckY + 2.11 - dropBelowDavit);
+        const localY = Math.min(13.85, 14.95 - dropBelowDavit);
         lb.boatGroup.position.set(xOut, localY, lb.baseZ);
 
         const halfPivot = lb.homeParent.parent;
@@ -2582,7 +2557,7 @@ export function createCrewAndLifeboats(
         const roll = halfPivot?.parent ? halfPivot.parent.rotation.z : 0;
         setEulerXYZ(lb.boatGroup, -halfPitch * 0.55, 0, -roll * 0.7);
 
-        const ropeTop = davitDeckY + 2.11;
+        const ropeTop = 14.95;
         const ropeBot = lb.boatGroup.position.y + 0.4;
         const ropeLen = Math.max(0.2, ropeTop - ropeBot);
         const ropeMidY = (ropeTop + ropeBot) * 0.5;
@@ -2903,15 +2878,15 @@ export function createCrewAndLifeboats(
       lb.davitForeArm.rotation.set(0, 0, -lb.side * cutterSwing);
       lb.davitAftArm.rotation.set(0, 0, -lb.side * cutterSwing);
       lb.ropeFore.visible = true;
-      lb.ropeFore.position.set(cutterX, davitDeckY + 1.68, lb.baseZ - 2.65);
+      lb.ropeFore.position.set(cutterX, 14.52, lb.baseZ - 2.65);
       lb.ropeFore.scale.set(1, 0.92, 1);
       lb.ropeAft.visible = true;
-      lb.ropeAft.position.set(cutterX, davitDeckY + 1.68, lb.baseZ + 2.65);
+      lb.ropeAft.position.set(cutterX, 14.52, lb.baseZ + 2.65);
       lb.ropeAft.scale.set(1, 0.92, 1);
       lb.occupantsGroup.visible = false;
       lb.oarsGroup.visible = false;
       lb.lanternMesh.visible = false;
-      lb.boatGroup.position.set(cutterX, davitDeckY + 1.01, lb.baseZ);
+      lb.boatGroup.position.set(cutterX, 13.85, lb.baseZ);
       setEulerXYZ(lb.boatGroup, 0, 0, 0);
     }
   };

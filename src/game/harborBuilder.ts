@@ -270,13 +270,6 @@ export function buildSouthamptonHarbor(
     '#28161a',
   );
   ownTextures.push(signTex38);
-  const signTex36 = createTerminalSignTexture(
-    'COSTA CROCIERE · BERTH 36',
-    'COSTA CONCORDIA · CRUISE QUAY WEST',
-    '#f4c41c',
-    '#073573',
-  );
-  ownTextures.push(signTex36);
   const clockTex = createDockClockTexture();
   ownTextures.push(clockTex);
 
@@ -300,7 +293,6 @@ export function buildSouthamptonHarbor(
   const terminalSignMat44 = trackMat(makePBR('harbor_termSignMat44', { albedoTex: signTex44, roughness: 0.5, metallic: 0.1, envIntensity: 0.4 }));
   const terminalSignMat40 = trackMat(makePBR('harbor_termSignMat40', { albedoTex: signTex40, roughness: 0.5, metallic: 0.1, envIntensity: 0.4 }));
   const terminalSignMat38 = trackMat(makePBR('harbor_termSignMat38', { albedoTex: signTex38, roughness: 0.5, metallic: 0.1, envIntensity: 0.4 }));
-  const terminalSignMat36 = trackMat(makePBR('harbor_termSignMat36', { albedoTex: signTex36, roughness: 0.5, metallic: 0.1, envIntensity: 0.4 }));
   const clockFaceMat = trackMat(makePBR('harbor_clockMat', { albedoTex: clockTex, emissive: 0xffe1a0, emissiveIntensity: 0.3, roughness: 0.42, envIntensity: 0.35 }));
   const warmLanternMat = trackMat(makePBR('harbor_lanternMat', { color: 0xffd78c, emissive: 0xffb44c, emissiveIntensity: 0.25, roughness: 0.35, envIntensity: 0.3 }));
 
@@ -364,18 +356,18 @@ export function buildSouthamptonHarbor(
   tideBall.material = rustRedMat;
   tideBall.position.set(25.2, 16.2, -177);
 
-  // North Basin Head Cross-Quay (spans Berth 44, Berth 40, Berth 38 & Berth 36: x in [-466, +92])
-  const northQuay = trackMesh(buildBox('harbor_northQuay', 558, 9.2, 62), root, false, true);
+  // North Basin Head Cross-Quay (spans Berth 44, Berth 40 & Berth 38: x in [-332, +92])
+  const northQuay = trackMesh(buildBox('harbor_northQuay', 424, 9.2, 62), root, false, true);
   northQuay.material = graniteMat;
-  northQuay.position.set(-187, -0.4, 287);
+  northQuay.position.set(-120, -0.4, 287);
 
-  const northApron = trackMesh(buildBox('harbor_northApron', 558.4, 0.32, 62.4), root, false, true);
+  const northApron = trackMesh(buildBox('harbor_northApron', 424.4, 0.32, 62.4), root, false, true);
   northApron.material = cobbleDeckMat;
-  northApron.position.set(-187, 4.25, 287);
+  northApron.position.set(-120, 4.25, 287);
 
-  const northCoping = trackMesh(buildBox('harbor_northCoping', 426, 0.5, 1.2), root);
+  const northCoping = trackMesh(buildBox('harbor_northCoping', 296, 0.5, 1.2), root);
   northCoping.material = copingStoneMat;
-  northCoping.position.set(-193, 4.22, 256.2);
+  northCoping.position.set(-124, 4.22, 256.2);
 
   // Clock Tower
   const clockTower = new THREE.Group();
@@ -434,44 +426,24 @@ export function buildSouthamptonHarbor(
   westPierHeadOuter.material = graniteMat;
   westPierHeadOuter.position.set(-182, -0.35, -188);
 
-  // West Cruise Pier (separating RMS Lusitania Berth 38 at x=-215 & Costa Concordia Berth 36 at x=-359)
-  const farWestQuay = trackMesh(buildBox('harbor_farWestQuay', 64.0, 9.2, 446), root, false, true);
+  // Far-West Outer Quay (flanking RMS Lusitania port slip at Berth 38: x in [-332, -272])
+  const farWestQuay = trackMesh(buildBox('harbor_farWestQuay', 60, 9.2, 446), root, false, true);
   farWestQuay.material = graniteMat;
-  farWestQuay.position.set(-304.0, -0.4, 35);
-  const farWestApron = trackMesh(buildBox('harbor_farWestApron', 64.4, 0.32, 446.4), root, false, true);
+  farWestQuay.position.set(-302, -0.4, 35);
+  const farWestApron = trackMesh(buildBox('harbor_farWestApron', 60.4, 0.32, 446.4), root, false, true);
   farWestApron.material = cobbleDeckMat;
-  farWestApron.position.set(-304.0, 4.25, 35);
+  farWestApron.position.set(-302, 4.25, 35);
   const farWestCoping = trackMesh(buildBox('harbor_farWestCoping', 1.15, 0.5, 446.4), root);
   farWestCoping.material = copingStoneMat;
   farWestCoping.position.set(-272.4, 4.22, 35);
-  const farWestCopingWest = trackMesh(buildBox('harbor_farWestCopingW', 1.15, 0.5, 446.4), root);
-  farWestCopingWest.material = copingStoneMat;
-  farWestCopingWest.position.set(-335.6, 4.22, 35);
   const farWestPierHead = trackMesh(buildCylinder('harbor_farWestPier', 14, 15, 9.4, 20), root);
   farWestPierHead.material = graniteMat;
-  farWestPierHead.position.set(-288, -0.35, -188);
-  const farWestPierHeadOuter = trackMesh(buildCylinder('harbor_farWestPierOuter', 14, 15, 9.4, 20), root);
-  farWestPierHeadOuter.material = graniteMat;
-  farWestPierHeadOuter.position.set(-320, -0.35, -188);
+  farWestPierHead.position.set(-286, -0.35, -188);
 
-  // Far-West Outer Quay (flanking Costa Concordia port slip at Berth 36: x in [-466, -406])
-  const outerWestQuay = trackMesh(buildBox('harbor_outerWestQuay', 60, 9.2, 446), root, false, true);
-  outerWestQuay.material = graniteMat;
-  outerWestQuay.position.set(-436, -0.4, 35);
-  const outerWestApron = trackMesh(buildBox('harbor_outerWestApron', 60.4, 0.32, 446.4), root, false, true);
-  outerWestApron.material = cobbleDeckMat;
-  outerWestApron.position.set(-436, 4.25, 35);
-  const outerWestCoping = trackMesh(buildBox('harbor_outerWestCoping', 1.15, 0.5, 446.4), root);
-  outerWestCoping.material = copingStoneMat;
-  outerWestCoping.position.set(-406.4, 4.22, 35);
-  const outerWestPierHead = trackMesh(buildCylinder('harbor_outerWestPier', 14, 15, 9.4, 20), root);
-  outerWestPierHead.material = graniteMat;
-  outerWestPierHead.position.set(-422, -0.35, -188);
-
-  // Timber Fender Pilings (Instanced across all 4 berths + North Basin)
+  // Timber Fender Pilings (Instanced across all 3 berths + North Basin)
   const fenderProto = buildBox('harbor_fendersProto', 0.45, 7.6, 0.48);
   extraGeos.push(fenderProto.geometry);
-  const fenderCount = 54 * 6 + 52;
+  const fenderCount = 54 * 4 + 34;
   const fenderSlot = createInstancedSlot('harbor_fenders', fenderProto.geometry, timberPilingMat, fenderCount, false, root);
   instancedMeshes.push(fenderSlot.mesh);
   let fIdx = 0;
@@ -487,18 +459,12 @@ export function buildSouthamptonHarbor(
   for (let i = 0; i < 54; i++) {
     writeInstanceMatrix(fenderSlot, fIdx++, -271.55, 1.0, -172 + i * 7.8, 0, 0, 0);
   }
-  for (let i = 0; i < 54; i++) {
-    writeInstanceMatrix(fenderSlot, fIdx++, -336.45, 1.0, -172 + i * 7.8, 0, 0, 0);
-  }
-  for (let i = 0; i < 54; i++) {
-    writeInstanceMatrix(fenderSlot, fIdx++, -405.55, 1.0, -172 + i * 7.8, 0, 0, 0);
-  }
-  for (let i = 0; i < 52; i++) {
-    writeInstanceMatrix(fenderSlot, fIdx++, -400 + i * 7.8, 1.0, 255.7, 0, Math.PI / 2, 0);
+  for (let i = 0; i < 34; i++) {
+    writeInstanceMatrix(fenderSlot, fIdx++, -255 + i * 7.8, 1.0, 255.7, 0, Math.PI / 2, 0);
   }
   commitInstanceMatrices(fenderSlot, fenderCount);
 
-  // Cast-Iron Mooring Bollards across all 4 berths
+  // Cast-Iron Mooring Bollards across all 3 berths
   const bollardZList = [-160, -115, -70, -25, 20, 68, 118, 165, 212];
   const bollardProfile = [
     new THREE.Vector2(0.36, 0),
@@ -510,7 +476,7 @@ export function buildSouthamptonHarbor(
   ];
   const bollardProto = buildLatheMesh('harbor_bollardsProto', bollardProfile, 12);
   extraGeos.push(bollardProto.geometry);
-  const bollardSlot = createInstancedSlot('harbor_bollards', bollardProto.geometry, darkIronMat, bollardZList.length * 6, false, root);
+  const bollardSlot = createInstancedSlot('harbor_bollards', bollardProto.geometry, darkIronMat, bollardZList.length * 4, false, root);
   instancedMeshes.push(bollardSlot.mesh);
   let bolIdx = 0;
   for (const bz of bollardZList) {
@@ -518,10 +484,8 @@ export function buildSouthamptonHarbor(
     writeInstanceMatrix(bollardSlot, bolIdx++, -129.6, 4.35, bz, 0, 0, 0);
     writeInstanceMatrix(bollardSlot, bolIdx++, -194.6, 4.35, bz, 0, 0, 0);
     writeInstanceMatrix(bollardSlot, bolIdx++, -273.5, 4.35, bz, 0, 0, 0);
-    writeInstanceMatrix(bollardSlot, bolIdx++, -334.6, 4.35, bz, 0, 0, 0);
-    writeInstanceMatrix(bollardSlot, bolIdx++, -407.5, 4.35, bz, 0, 0, 0);
   }
-  commitInstanceMatrices(bollardSlot, bollardZList.length * 6);
+  commitInstanceMatrices(bollardSlot, bollardZList.length * 4);
 
   // Mooring Hawsers & Retractable Passenger Embarkation Gangways per Berth
   interface BerthMooringRig {
@@ -623,22 +587,6 @@ export function buildSouthamptonHarbor(
         [10.8, 7.5, 148],
       ],
       [18, 96],
-    ),
-    concordia: buildBerthMooring(
-      'concordia',
-      -359,
-      -334.6,
-      -338.8,
-      5.8,
-      [
-        [13.4, 10.6, -46],
-        [17.2, 9.8, -14],
-        [17.7, 9.6, 26],
-        [17.7, 9.6, 78],
-        [17.6, 9.6, 134],
-        [15.4, 9.8, 178],
-      ],
-      [24, 128],
     ),
   };
   const hawsersGroup = berthMoorings.titanic.hawsers;
@@ -827,10 +775,8 @@ export function buildSouthamptonHarbor(
   buildWarehouse(-162.2, -68, 96, 1);
   buildWarehouse(-162.2, 56, 126, 1, terminalSignMat40, terminalSignMat38);
   buildWarehouse(-162.2, 185, 76, 1);
-  buildWarehouse(-304, -50, 96, 1, undefined, terminalSignMat36);
-  buildWarehouse(-304, 120, 120, 1);
-  buildWarehouse(-434, -50, 96, 1);
-  buildWarehouse(-434, 120, 120, 1);
+  buildWarehouse(-298, -50, 96, 1);
+  buildWarehouse(-298, 120, 120, 1);
 
   // =========================================================================
   // 4. STOTHERT & PITT DOCKSIDE ELECTRIC PORTAL GANTRY CRANES
@@ -910,20 +856,6 @@ export function buildSouthamptonHarbor(
     globeWest.material = warmLanternMat;
     globeWest.position.set(-277.0, 9.05, lz);
 
-    const postConc = trackMesh(buildCylinder(`harbor_lampPostC_${lz}`, 0.08, 0.16, 4.6, 8), root);
-    postConc.material = darkIronMat;
-    postConc.position.set(-331.0, 6.65, lz);
-    const globeConc = trackMesh(buildSphere(`harbor_lampGlobeC_${lz}`, 0.28, 8, 8), root);
-    globeConc.material = warmLanternMat;
-    globeConc.position.set(-331.0, 9.05, lz);
-
-    const postOuter = trackMesh(buildCylinder(`harbor_lampPostO_${lz}`, 0.08, 0.16, 4.6, 8), root);
-    postOuter.material = darkIronMat;
-    postOuter.position.set(-410.0, 6.65, lz);
-    const globeOuter = trackMesh(buildSphere(`harbor_lampGlobeO_${lz}`, 0.28, 8, 8), root);
-    globeOuter.material = warmLanternMat;
-    globeOuter.position.set(-410.0, 9.05, lz);
-
     const crate = trackMesh(buildBox(`harbor_crate_${lz}`, 1.4, 1.1, 1.8), root);
     crate.material = buffFunnelMat;
     crate.position.set(34.5, 4.9, lz + 6);
@@ -931,13 +863,12 @@ export function buildSouthamptonHarbor(
   }
 
   // =========================================================================
-  // 5. HISTORIC & MODERN LINERS DOCKED IN SOUTHAMPTON (TITANIC, BRITANNIC, LUSITANIA, COSTA CONCORDIA)
+  // 5. HISTORIC OCEAN LINERS DOCKED IN SOUTHAMPTON (TITANIC, BRITANNIC, LUSITANIA)
   // =========================================================================
   const companionRigs: Record<VesselId, TitanicShipRig> = {
     titanic: buildOceanLinerShip(scene, textures, isSoftwareGl, 'titanic', true),
     britannic: buildOceanLinerShip(scene, textures, isSoftwareGl, 'britannic', true),
     lusitania: buildOceanLinerShip(scene, textures, isSoftwareGl, 'lusitania', true),
-    concordia: buildOceanLinerShip(scene, textures, isSoftwareGl, 'concordia', true),
   };
 
   for (const vesselId of VESSEL_ORDER) {
@@ -1401,7 +1332,7 @@ export function buildSouthamptonHarbor(
       const bGroup = new THREE.Group();
       bGroup.name = `harbor_buoy_${side}_${bz}`;
       root.add(bGroup);
-      bGroup.position.set(side < 0 ? -388 : 58, 0.15, bz);
+      bGroup.position.set(side < 0 ? -246 : 58, 0.15, bz);
       const hull = trackMesh(buildLatheMesh(`harbor_buoyHull_${side}_${bz}`, buoyProfile, 12), bGroup);
       hull.material = side < 0 ? portBuoyMat : stbdBuoyMat;
 
@@ -1418,7 +1349,7 @@ export function buildSouthamptonHarbor(
   }
 
   // =========================================================================
-  // 9. STONE BREAKWATER ARMS & CALSHOT-STYLE LIGHTHOUSES AT WIDENED 488M HARBOR MOUTH
+  // 9. STONE BREAKWATER ARMS & CALSHOT-STYLE LIGHTHOUSES AT WIDENED 346M HARBOR MOUTH
   // =========================================================================
   const beaconRotors: THREE.Group[] = [];
   const towerProfile = [
@@ -1429,7 +1360,7 @@ export function buildSouthamptonHarbor(
     new THREE.Vector2(3.3, 17.6),
   ];
   for (const side of [-1, 1]) {
-    const lhX = side < 0 ? -410 : 78;
+    const lhX = side < 0 ? -268 : 78;
     const mole = trackMesh(buildBox(`harbor_mole_${side}`, 260, 7.5, 18), root, false, true);
     mole.material = graniteMat;
     mole.position.set(lhX + side * 130, 1.6, -515);
@@ -1476,10 +1407,10 @@ export function buildSouthamptonHarbor(
     [195, -140, 115, 32, 230, false],
     [185, 110, 110, 28, 220, false],
     [175, 320, 130, 26, 170, false],
-    [-565, -390, 140, 34, 210, true],
-    [-595, -110, 160, 38, 280, false],
-    [-580, 170, 145, 30, 240, true],
-    [-190, 420, 320, 32, 140, false],
+    [-415, -390, 140, 34, 210, true],
+    [-445, -110, 160, 38, 280, false],
+    [-430, 170, 145, 30, 240, true],
+    [-120, 420, 240, 32, 140, false],
   ];
   for (let hi = 0; hi < shoreHills.length; hi++) {
     const [hx, hz, rx, ry, rz, rocky] = shoreHills[hi];
@@ -1518,7 +1449,7 @@ export function buildSouthamptonHarbor(
     circleObstacles.push({
       id: side < 0 ? 'pier_port' : 'pier_stbd',
       kind: 'pier',
-      x: side < 0 ? -410 : 78,
+      x: side < 0 ? -268 : 78,
       z: -497,
       radius: 15.2,
       label: 'BREAKWATER LIGHTHOUSE PIER',
@@ -1530,21 +1461,18 @@ export function buildSouthamptonHarbor(
     titanic: { id: 'companion_titanic', kind: 'quay', minX: 99999, maxX: 99999, minZ: 99999, maxZ: 99999, label: 'MOORED LINER RMS TITANIC' },
     britannic: { id: 'companion_britannic', kind: 'quay', minX: -123.3, maxX: -94.7, minZ: -72, maxZ: 193, label: 'MOORED LINER HMHS BRITANNIC' },
     lusitania: { id: 'companion_lusitania', kind: 'quay', minX: -228.4, maxX: -201.6, minZ: -64, maxZ: 171, label: 'MOORED LINER RMS LUSITANIA' },
-    concordia: { id: 'companion_concordia', kind: 'quay', minX: -376.75, maxX: -341.25, minZ: -78, maxZ: 208, label: 'MOORED CRUISE LINER COSTA CONCORDIA' },
   };
 
   const boxObstacles: HarborBoxObstacle[] = [
     { id: 'berth_44_quay', kind: 'quay', minX: 19.3, maxX: 92.0, minZ: -176.0, maxZ: 258.0, label: 'BERTH 44 GRANITE QUAY WALL' },
     { id: 'central_pier_quay', kind: 'quay', minX: -196.0, maxX: -128.4, minZ: -188.0, maxZ: 258.0, label: 'BERTH 40 / 38 CENTRAL QUAY PIER' },
-    { id: 'far_west_quay', kind: 'quay', minX: -336.0, maxX: -272.0, minZ: -188.0, maxZ: 258.0, label: 'BERTH 38 / 36 CRUISE QUAY PIER' },
-    { id: 'outer_west_quay', kind: 'quay', minX: -466.0, maxX: -406.0, minZ: -188.0, maxZ: 258.0, label: 'BERTH 36 OUTER QUAY WALL' },
-    { id: 'north_basin_quay', kind: 'quay', minX: -466.0, maxX: 92.0, minZ: 255.8, maxZ: 318.0, label: 'WHITE STAR DOCK NORTH QUAY' },
-    { id: 'breakwater_port', kind: 'breakwater', minX: -670, maxX: -410, minZ: -535, maxZ: -496, label: 'PORT STONE BREAKWATER MOLE' },
+    { id: 'far_west_quay', kind: 'quay', minX: -332.0, maxX: -272.0, minZ: -188.0, maxZ: 258.0, label: 'BERTH 38 OUTER QUAY WALL' },
+    { id: 'north_basin_quay', kind: 'quay', minX: -332.0, maxX: 92.0, minZ: 255.8, maxZ: 318.0, label: 'WHITE STAR DOCK NORTH QUAY' },
+    { id: 'breakwater_port', kind: 'breakwater', minX: -530, maxX: -268, minZ: -535, maxZ: -496, label: 'PORT STONE BREAKWATER MOLE' },
     { id: 'breakwater_stbd', kind: 'breakwater', minX: 78, maxX: 340, minZ: -535, maxZ: -496, label: 'STARBOARD STONE BREAKWATER MOLE' },
     companionHullBoxes.titanic,
     companionHullBoxes.britannic,
     companionHullBoxes.lusitania,
-    companionHullBoxes.concordia,
   ];
 
   const setActiveVessel = (vesselId: VesselId) => {
@@ -1837,8 +1765,6 @@ export function buildSouthamptonHarbor(
             e.x = MathUtils.clamp(e.x, -120, 12.5);
           } else if (e.x <= -196.0 && e.x > -272.0) {
             e.x = MathUtils.clamp(e.x, -264, -203);
-          } else if (e.x <= -336.0 && e.x > -406.0) {
-            e.x = MathUtils.clamp(e.x, -398, -342);
           } else {
             e.z = -194;
           }

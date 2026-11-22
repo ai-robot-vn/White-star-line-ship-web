@@ -50,7 +50,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       </div>
 
       {/* Center Frosted Glass Title Card */}
-      <div className="my-auto flex flex-col items-center text-center max-w-5xl mx-auto w-full">
+      <div className="my-auto flex flex-col items-center text-center max-w-3xl mx-auto w-full">
         <div className="apple-glass-panel px-6 py-7 md:px-10 md:py-8 rounded-3xl pointer-events-auto w-full">
           <svg
             viewBox="0 0 560 128"
@@ -93,12 +93,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <line x1="90" y1="112" x2="470" y2="112" stroke="#e6c373" strokeWidth="1" opacity="0.5" />
           </svg>
 
-          <p className="text-xs md:text-sm text-slate-200/90 max-w-2xl mx-auto mb-5 leading-relaxed">
-            Choose your vessel moored side by side in Southampton Port. Clear the harbor breakwaters into an evenly spaced North Atlantic ice field as daylight transitions into starry Arctic darkness over one minute.
+          <p className="text-xs md:text-sm text-slate-200/90 max-w-xl mx-auto mb-5 leading-relaxed">
+            Choose your ocean liner moored side by side in Southampton Port. Clear the harbor breakwaters into an evenly spaced North Atlantic ice field as daylight transitions into starry Arctic darkness over one minute.
           </p>
 
-          {/* 4-Ship Fleet Selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6 text-left">
+          {/* 3-Ship Fleet Selector */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-6 text-left">
             {VESSEL_ORDER.map((id) => {
               const spec = VESSEL_SPECS[id];
               const isSelected = selectedVessel === id;
@@ -107,9 +107,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                   ? 'text-emerald-300'
                   : id === 'lusitania'
                     ? 'text-rose-300'
-                    : id === 'concordia'
-                      ? 'text-yellow-300'
-                      : 'text-amber-200';
+                    : 'text-amber-200';
               return (
                 <button
                   key={id}

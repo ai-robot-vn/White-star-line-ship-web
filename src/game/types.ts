@@ -1,4 +1,4 @@
-export type VesselId = 'titanic' | 'britannic' | 'lusitania' | 'concordia';
+export type VesselId = 'titanic' | 'britannic' | 'lusitania';
 
 export interface VesselSpec {
   id: VesselId;
@@ -22,7 +22,7 @@ export interface VesselSpec {
   specSummary: string;
 }
 
-export const VESSEL_ORDER: VesselId[] = ['titanic', 'britannic', 'lusitania', 'concordia'];
+export const VESSEL_ORDER: VesselId[] = ['titanic', 'britannic', 'lusitania'];
 
 export const VESSEL_SPECS: Record<VesselId, VesselSpec> = {
   titanic: {
@@ -87,27 +87,6 @@ export const VESSEL_SPECS: Record<VesselId, VesselSpec> = {
     hullResilience: 0.94,
     telegraphBrand: 'CUNARD LINE',
     specSummary: 'Cunard Greyhound · 239.8m · 32 KTS Flank · +18% Agile Helm',
-  },
-  concordia: {
-    id: 'concordia',
-    name: 'Costa Concordia',
-    shortName: 'Concordia',
-    line: 'Costa Crociere',
-    berthLabel: 'Berth 36',
-    berthX: -359,
-    berthZ: 0,
-    lengthM: 290.2,
-    beamM: 35.5,
-    halfBeam: 17.75,
-    bowZ: -80.0,
-    sternZ: 210.2,
-    breakZ: 98.0,
-    fullKnots: 21,
-    flankKnots: 24,
-    turnMultiplier: 1.24,
-    hullResilience: 0.9,
-    telegraphBrand: 'COSTA CROCIERE',
-    specSummary: 'Costa Flagship · 290.2m · 24 KTS Flank · Twin Azipod Helm',
   },
 };
 
@@ -333,85 +312,20 @@ const LUSITANIA_SPOT_OVERRIDES: Partial<Record<VesselSpotId, Partial<VesselSpotS
   },
 };
 
-const CONCORDIA_SPOT_OVERRIDES: Partial<Record<VesselSpotId, Partial<VesselSpotSpec>>> = {
-  wheelhouse: {
-    label: 'Panoramic Navigation Bridge',
-    localTarget: [0, 28.58, 1.32],
-    walkBounds: { minX: -5.4, maxX: 5.4, minZ: -1.3, maxZ: 2.6 },
-  },
-  bow: {
-    label: 'Bulbous Bow & Mooring Deck',
-    localTarget: [0, 12.5, -60],
-    defaultDistance: 44,
-    walkBounds: { minX: -8.2, maxX: 8.2, minZ: -74, maxZ: -38 },
-  },
-  crowsNest: {
-    label: 'Radar Mast & Sky Deck',
-    localTarget: [0, 42.5, 4.0],
-    defaultDistance: 24,
-  },
-  lifeboats: {
-    label: 'Deck 4 Boat Embarkation',
-    localTarget: [16.8, 11.8, 32],
-    defaultDistance: 46,
-    walkBounds: { minX: -16.8, maxX: 16.8, minZ: 6, maxZ: 96 },
-  },
-  funnels: {
-    label: 'Full 290m Cruise Ship & Funnel',
-    localTarget: [0, 25.5, 68],
-    defaultDistance: 158,
-  },
-  stern: {
-    label: 'Transom Stern & Lido Aft',
-    localTarget: [0, 14.5, 192],
-    defaultDistance: 54,
-    walkBounds: { minX: -12.0, maxX: 12.0, minZ: 174, maxZ: 204 },
-  },
-  staircase: {
-    label: 'Europa Grand Atrium',
-    localTarget: [0, 15.2, 42.0],
-    walkBounds: { minX: -7.5, maxX: 7.5, minZ: 32.0, maxZ: 52.0 },
-  },
-  marconi: {
-    label: 'Bridge Radio & Radar Center',
-    localTarget: [0, 28.1, 6.2],
-    walkBounds: { minX: -5.0, maxX: 5.0, minZ: 3.6, maxZ: 9.2 },
-  },
-  lounge: {
-    label: 'Lido Magrodome Pool Deck',
-    localTarget: [0, 25.4, 72.0],
-    walkBounds: { minX: -13.0, maxX: 13.0, minZ: 56.0, maxZ: 88.0 },
-  },
-  dining: {
-    label: 'Ristorante Milano Dining',
-    localTarget: [0, 6.4, 58.0],
-    walkBounds: { minX: -13.5, maxX: 13.5, minZ: 42.0, maxZ: 74.0 },
-  },
-  engine: {
-    label: 'Diesel-Electric Propulsion Room',
-    localTarget: [0, 2.2, 122.0],
-    walkBounds: { minX: -10.5, maxX: 10.5, minZ: 108.0, maxZ: 136.0 },
-  },
-};
-
 export function getVesselSpotSpec(vesselId: VesselId, spotId: VesselSpotId): VesselSpotSpec {
   const base = VESSEL_SPOTS.find((s) => s.id === spotId) ?? VESSEL_SPOTS[0];
-  if (vesselId === 'lusitania') {
-    const ov = LUSITANIA_SPOT_OVERRIDES[spotId];
-    return ov ? { ...base, ...ov } : base;
-  }
-  if (vesselId === 'concordia') {
-    const ov = CONCORDIA_SPOT_OVERRIDES[spotId];
-    return ov ? { ...base, ...ov } : base;
-  }
-  return base;
+  if (vesselId !== 'lusitania') return base;
+  const ov = LUSITANIA_SPOT_OVERRIDES[spotId];
+  if (!ov) return base;
+  return {
+    ...base,
+    ...ov,
+  };
 }
 
 export function getVesselSpots(vesselId: VesselId): VesselSpotSpec[] {
-  if (vesselId === 'lusitania' || vesselId === 'concordia') {
-    return VESSEL_SPOTS.map((s) => getVesselSpotSpec(vesselId, s.id));
-  }
-  return VESSEL_SPOTS;
+  if (vesselId !== 'lusitania') return VESSEL_SPOTS;
+  return VESSEL_SPOTS.map((s) => getVesselSpotSpec(vesselId, s.id));
 }
 
 export type TelegraphNotch = 'ASTERN' | 'STOP' | 'SLOW' | 'HALF' | 'FULL' | 'FLANK';

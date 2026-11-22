@@ -365,8 +365,7 @@ export class TitanicEngine {
       0.48,
       1.0,
     );
-    const slPos = this.ship.searchlightHead.position;
-    this.searchSpotLight.position.set(slPos.x, slPos.y - 0.03, slPos.z - 0.3);
+    this.searchSpotLight.position.set(0, 16.25, -1.5);
     this.searchSpotLight.target = this.ship.searchlightTarget;
     this.ship.bowContent.add(this.searchSpotLight);
     this.syncActiveVesselDimensions();
@@ -506,7 +505,7 @@ export class TitanicEngine {
         if (Math.hypot(x, z - -850) < 130) {
           continue;
         }
-        if (z > -920 && x > -415 && x < 75) {
+        if (z > -920 && x > -265 && x < 75) {
           continue;
         }
 
@@ -589,8 +588,7 @@ export class TitanicEngine {
     this.selectedVessel = vesselId;
     const spec = VESSEL_SPECS[vesselId];
     this.ship = buildOceanLinerShip(this.scene, this.textures, this.isSoftwareGl, vesselId, false);
-    const slPos = this.ship.searchlightHead.position;
-    this.searchSpotLight.position.set(slPos.x, slPos.y - 0.03, slPos.z - 0.3);
+    this.searchSpotLight.position.set(0, 16.25, -1.5);
     this.searchSpotLight.target = this.ship.searchlightTarget;
     this.ship.bowContent.add(this.searchSpotLight);
     if (!this.isSoftwareGl) {
@@ -1802,12 +1800,6 @@ export class TitanicEngine {
   }
 
   private getExteriorDeckEyeY(localZ: number): number {
-    if (this.selectedVessel === 'concordia') {
-      if (localZ < -26.0) return 12.3; // Bulbous Bow & Mooring Deck
-      if (localZ <= 9.5) return 28.58; // Panoramic Bridge & Docking Wings
-      if (localZ <= 156.0) return 12.9; // Deck 4 Boat Promenade
-      return 15.8; // Aft Lido & Transom Stern Deck
-    }
     if (this.selectedVessel === 'lusitania') {
       if (localZ < -31.5) return 11.25; // Raised Forecastle
       if (localZ <= 120.0) return 14.62; // Promenade & Boat Deck
@@ -1822,18 +1814,6 @@ export class TitanicEngine {
 
   private getExteriorDeckHalfBeam(localZ: number): number {
     const vSpec = VESSEL_SPECS[this.selectedVessel];
-    if (this.selectedVessel === 'concordia') {
-      if (localZ < -24.0) {
-        return MathUtils.clamp(((localZ - vSpec.bowZ) / 56.0) * 14.5, 2.0, 14.5);
-      }
-      if (localZ <= 6.5) {
-        return 19.2; // Extended panoramic bridge docking wings
-      }
-      if (localZ > 168.0) {
-        return MathUtils.clamp(((vSpec.sternZ - localZ) / 42.2) * 14.0 + 3.0, 4.0, 15.0);
-      }
-      return vSpec.halfBeam - 0.6;
-    }
     if (this.selectedVessel === 'lusitania') {
       if (localZ < -31.5) {
         return MathUtils.clamp(((localZ - vSpec.bowZ) / 34.5) * 11.0, 1.8, 11.0);
@@ -3252,16 +3232,16 @@ export class TitanicEngine {
   // CAMERA RIG (Title Harbor Sweep + Free 360° Orbit + Wheelhouse & Interior Decks)
   // =========================================================================
   private updateTitleCamera(): void {
-    // Graceful sunlit harbor vista framing Titanic, Britannic, Lusitania & Costa Concordia
+    // Graceful sunlit harbor vista from port-bow channel water framing Titanic, Britannic & Lusitania
     const drift = Math.sin(this.simTime * 0.18);
-    const camX = this.shipX * 0.58 - 175 + drift * 18;
-    const camY = 39.5 + Math.cos(this.simTime * 0.24) * 2.4;
-    const camZ = -218 + drift * 14;
-    const focusX = this.shipX * 0.55 - 110;
+    const camX = this.shipX * 0.65 - 110 + drift * 16;
+    const camY = 33.5 + Math.cos(this.simTime * 0.24) * 2.2;
+    const camZ = -176 + drift * 14;
+    const focusX = this.shipX * 0.62 - 42;
 
     this.camera.position.set(camX, camY, this.shipZ + camZ);
     this.camera.up.set(0, 1, 0);
-    _vCamTarget.set(focusX, 16.5, this.shipZ + 38);
+    _vCamTarget.set(focusX, 15.0, this.shipZ + 34);
     this.camera.lookAt(_vCamTarget);
   }
 
