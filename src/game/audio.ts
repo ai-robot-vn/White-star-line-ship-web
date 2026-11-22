@@ -1,3 +1,6 @@
+const BGM_TRACK_URL =
+  '/assets/aistudio/DAISHI_DANCE__Cecile_Corbel_-_Take_Me_Hand__Lyrics__bab4a031.mp3';
+
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -6,6 +9,11 @@ export class SoundEngine {
   private engineGain: GainNode | null = null;
   private oceanNoiseGain: GainNode | null = null;
   private oceanFilter: BiquadFilterNode | null = null;
+  private bgmAudio: HTMLAudioElement | null = null;
+  private bgmUserMuted = false;
+  private bgmDucked = false;
+  private readonly bgmNormalVolume = 0.42;
+  private readonly bgmDuckVolume = 0.18;
   private muted = false;
   private initialized = false;
 
@@ -13,10 +21,69 @@ export class SoundEngine {
     return this.muted;
   }
 
+  public isMusicMuted(): boolean {
+    return this.bgmUserMuted || this.muted;
+  }
+
+  private ensureBgmElement(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') return null;
+    if (!this.bgmAudio) {
+      const audio = new Audio(BGM_TRACK_URL);
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.volume = this.bgmDucked ? this.bgmDuckVolume : this.bgmNormalVolume;
+      audio.muted = this.muted || this.bgmUserMuted;
+      this.bgmAudio = audio;
+    }
+    return this.bgmAudio;
+  }
+
+  public startBackgroundMusic(): void {
+    const audio = this.ensureBgmElement();
+    if (!audio) return;
+    audio.volume = this.bgmDucked ? this.bgmDuckVolume : this.bgmNormalVolume;
+    audio.muted = this.muted || this.bgmUserMuted;
+    if (audio.paused && !audio.muted) {
+      void audio.play().catch(() => {
+        // Browser autoplay blocked until user gesture; retried in unlock()
+      });
+    }
+  }
+
+  public setMusicDucked(ducked: boolean): void {
+    if (this.bgmDucked === ducked) return;
+    this.bgmDucked = ducked;
+    if (this.bgmAudio) {
+      this.bgmAudio.volume = ducked ? this.bgmDuckVolume : this.bgmNormalVolume;
+    }
+  }
+
+  public toggleMusicMuted(): boolean {
+    this.bgmUserMuted = !this.bgmUserMuted;
+    if (!this.bgmUserMuted && this.muted) {
+      this.setMuted(false);
+    }
+    if (this.bgmAudio) {
+      this.bgmAudio.muted = this.muted || this.bgmUserMuted;
+      if (!this.bgmAudio.muted && this.bgmAudio.paused) {
+        void this.bgmAudio.play().catch(() => {});
+      }
+    } else if (!this.bgmUserMuted && !this.muted) {
+      this.startBackgroundMusic();
+    }
+    return this.isMusicMuted();
+  }
+
   public setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.7, this.ctx.currentTime, 0.05);
+    }
+    if (this.bgmAudio) {
+      this.bgmAudio.muted = muted || this.bgmUserMuted;
+      if (!this.bgmAudio.muted && this.bgmAudio.paused) {
+        void this.bgmAudio.play().catch(() => {});
+      }
     }
   }
 
@@ -26,6 +93,7 @@ export class SoundEngine {
   }
 
   public unlock(): void {
+    this.startBackgroundMusic();
     if (this.initialized) {
       if (this.ctx && this.ctx.state === 'suspended') {
         void this.ctx.resume();
@@ -655,49 +723,14 @@ export class SoundEngine {
     noise.start(now);
   }
 
-  public playWeaponFire(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    const now = this.ctx.currentTime;
-
-    // Sharp metallic breech snap & muzzle crack
-    const osc = this.ctx.createOscillator();
-    const oscGain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(340, now);
-    osc.frequency.exponentialRampToValueAtTime(52, now + 0.14);
-    oscGain.gain.setValueAtTime(0.24, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-    osc.connect(oscGain);
-    oscGain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.18);
-
-    const dur = 0.34;
-    const buf = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * dur), this.ctx.sampleRate);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < ch.length; i++) {
-      ch[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.055));
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buf;
-
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = 'bandpass';
-    hp.frequency.setValueAtTime(1650, now);
-    hp.frequency.exponentialRampToValueAtTime(280, now + dur);
-    hp.Q.value = 0.85;
-
-    const nGain = this.ctx.createGain();
-    nGain.gain.setValueAtTime(0.32, now);
-    nGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    noise.connect(hp);
-    hp.connect(nGain);
-    nGain.connect(this.masterGain);
-    noise.start(now);
-  }
-
   public dispose(): void {
     try {
+      if (this.bgmAudio) {
+        this.bgmAudio.pause();
+        this.bgmAudio.removeAttribute('src');
+        this.bgmAudio.load();
+        this.bgmAudio = null;
+      }
       this.engineOsc1?.stop();
       this.engineOsc2?.stop();
       void this.ctx?.close();

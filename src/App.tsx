@@ -11,6 +11,10 @@ import {
 } from './game/types';
 
 const INITIAL_TELEMETRY: TelemetrySnapshot = {
+  vesselId: 'titanic',
+  vesselName: 'RMS Titanic',
+  vesselShortName: 'Titanic',
+  vesselBerthLabel: 'Berth 44',
   phase: 'title',
   cameraMode: 'wheelhouse',
   focusSpotId: 'wheelhouse',
@@ -34,13 +38,7 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {
   carpathiaDistanceM: 460,
   survivorsRescued: 0,
   boatsRecovered: 0,
-  warshipRescuing: false,
-  warshipSurvivors: 0,
-  warshipBoatsRecovered: 0,
-  warshipsIntact: 2,
   carpathiaSunk: false,
-  activeSubmarines: 0,
-  submarinesSunk: 0,
   focusCarpathia: false,
   aftermathFocus: 'lifeboats',
   inHarborZone: true,
@@ -52,12 +50,15 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {
   searchlightActive: false,
   searchlightCooldownPct: 0,
   icebergWarning: null,
+  icebergsInField: 0,
   lastEventText: null,
   autopilotEnabled: false,
   bowPanicActive: false,
-  weaponDrawn: false,
   endlessMode: false,
   isMuted: false,
+  isMusicMuted: false,
+  voyageTimeSec: 0,
+  skyPhaseLabel: 'DAYLIGHT',
 };
 
 export default function App() {
@@ -96,7 +97,7 @@ export default function App() {
       {/* Isolated WebGL Mount Container — React UI updates never tear down or re-render the canvas */}
       <div
         ref={canvasMountRef}
-        className={`absolute inset-0 w-full h-full ${telemetry.weaponDrawn ? 'cursor-crosshair' : ''}`}
+        className="absolute inset-0 w-full h-full"
       />
 
       {/* Brief Crimson Impact Vignette on Collision */}
@@ -114,6 +115,8 @@ export default function App() {
       {telemetry.phase === 'title' && (
         <TitleOverlay
           bestScore={telemetry.bestScore}
+          selectedVessel={telemetry.vesselId}
+          onSelectVessel={(id) => engineRef.current?.selectVessel(id, false)}
           onStart={() => engineRef.current?.startGame()}
           onStartNight={() => engineRef.current?.startNightVoyage()}
         />
@@ -122,15 +125,16 @@ export default function App() {
       {showGameHud && (
         <GameHUD
           telemetry={telemetry}
+          onSelectVessel={(id) => engineRef.current?.selectVessel(id, true)}
           onSelectTelegraph={(idx) => engineRef.current?.setTelegraphIndex(idx)}
           onSetRudder={(deg) => engineRef.current?.setManualRudder(deg)}
           onToggleAutopilot={() => engineRef.current?.toggleAutopilot()}
-          onToggleWeapon={() => engineRef.current?.toggleWeaponDrawn()}
           onTriggerSearchlight={() => engineRef.current?.triggerSearchlight()}
           onToggleCamera={() => engineRef.current?.toggleCameraMode()}
           onFocusSpot={(spotId) => engineRef.current?.focusVesselSpot(spotId)}
           onTogglePause={() => engineRef.current?.togglePause()}
           onToggleMute={() => engineRef.current?.toggleMute()}
+          onToggleMusic={() => engineRef.current?.toggleMusicMute()}
           onSkipSinking={() => engineRef.current?.skipSinking()}
           onFastForwardRescue={() => engineRef.current?.fastForwardRescueWait()}
           onFocusAftermath={(target) => engineRef.current?.focusAftermathTarget(target)}

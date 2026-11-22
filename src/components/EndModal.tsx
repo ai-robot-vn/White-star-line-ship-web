@@ -27,7 +27,7 @@ export const EndModal: React.FC<EndModalProps> = ({
   const isVictory = phase === 'victory';
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/55 backdrop-blur-md font-sans-ui">
+    <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/75 font-sans-ui">
       <div className="apple-glass-panel rounded-3xl max-w-md w-full p-7 md:p-8 text-center">
         <div className="text-[10px] tracking-[0.22em] uppercase text-amber-200 font-semibold mb-2">
           {isPaused
@@ -38,23 +38,25 @@ export const EndModal: React.FC<EndModalProps> = ({
         </div>
 
         <h2 className="font-display text-3xl font-bold text-white tracking-wide mb-3">
-          {isPaused ? 'Hold Course' : isVictory ? 'Safe Passage' : 'Voyage Log'}
+          {isPaused
+            ? 'Hold Course'
+            : isVictory
+              ? 'Safe Passage'
+              : 'Voyage Log'}
         </h2>
 
         <p className="text-sm text-slate-200/90 mb-6 leading-relaxed">
           {isPaused
             ? 'Orders are standing by in the wheelhouse.'
             : isVictory
-              ? 'You guided RMS Titanic swiftly to open Atlantic waters with her reinforced hull intact.'
+              ? `You guided ${telemetry.vesselName} swiftly through thousands of Atlantic icebergs with her reinforced hull intact.`
               : telemetry.carpathiaStage === 'complete'
-                ? `Titanic broke amidships and sank beneath the Atlantic, while the Royal Navy Escort Warships${telemetry.submarinesSunk > 0 ? ` sank ${telemetry.submarinesSunk} attacking submarine(s)` : ''} and RMS Carpathia rescued all 712 survivors from the 16 lifeboats.`
+                ? `${telemetry.vesselShortName} broke amidships and sank beneath the Atlantic, while RMS Carpathia steamed through the ice field and rescued all 712 survivors from the 16 lifeboats.`
                 : telemetry.carpathiaStage === 'boarding'
-                  ? `Titanic sank beneath the Atlantic. Both the Escort Warships and RMS Carpathia are alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far)${telemetry.submarinesSunk > 0 ? `, after driving off and sinking ${telemetry.submarinesSunk} hostile submarine(s)` : ''}.`
+                  ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far).`
                   : telemetry.carpathiaStage === 'approaching'
-                    ? `Titanic sank beneath the Atlantic. The Escort Warships have already brought ${telemetry.warshipSurvivors} survivors aboard while RMS Carpathia steams toward the remaining boats.`
-                    : telemetry.warshipRescuing
-                      ? `Titanic slipped beneath the waves. The following Escort Warships moved onto station and are rescuing lifeboats (${telemetry.warshipSurvivors} / 356 aboard) ahead of RMS Carpathia's arrival.`
-                      : 'Titanic broke amidships and slipped beneath the freezing Atlantic while 16 lifeboats pulled away and the Escort Warships moved in to carry out a rescue.'}
+                    ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is threading carefully through the icebergs toward the 16 waiting lifeboats (${telemetry.carpathiaDistanceM} m away).`
+                    : `${telemetry.vesselShortName} broke amidships and slipped beneath the freezing Atlantic while 16 lifeboats pulled away to await RMS Carpathia.`}
         </p>
 
         {/* Voyage Summary Readout */}
@@ -70,7 +72,9 @@ export const EndModal: React.FC<EndModalProps> = ({
               {phase === 'gameover' ? 'Rescued' : 'Near Misses'}
             </div>
             <div className="text-base font-bold text-amber-200 tabular-nums">
-              {phase === 'gameover' ? `${telemetry.survivorsRescued} / 712` : telemetry.nearMissCount}
+              {phase === 'gameover'
+                ? `${telemetry.survivorsRescued} / 712`
+                : telemetry.nearMissCount}
             </div>
           </div>
           <div>

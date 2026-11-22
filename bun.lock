@@ -5,6 +5,7 @@
     "": {
       "name": "react-example",
       "dependencies": {
+        "@babylonjs/core": "^9.37.1",
         "@google/genai": "^2.4.0",
         "@tailwindcss/vite": "^4.3.3",
         "@types/three": "^0.187.0",
@@ -32,6 +33,8 @@
     },
   },
   "packages": {
+    "@babylonjs/core": ["@babylonjs/core@9.37.1", "", {}, "sha512-OABdYAU5FvCGmIHj6zpfK+LTLJc8zUpKOhI0QNkDYyXy2P5ROA2dnUxfZCeR/TL1oNVnS/H4w/uUSt9GHDFZWQ=="],
+
     "@dimforge/rapier3d-compat": ["@dimforge/rapier3d-compat@0.12.0", "", {}, "sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow=="],
 
     "@emnapi/core": ["@emnapi/core@2.0.0-beta.2", "", { "dependencies": { "@emnapi/wasi-threads": "2.2.0", "tslib": "^2.4.0" } }, "sha512-MzCVoWtcg4Pm2B3je5mMvYMvj3MmBKw+fU7vbsJc9/iT8ip6/eYIHo/Dsm/mr+wsHB6SEyJDuxB09Yy6r/8+4A=="],

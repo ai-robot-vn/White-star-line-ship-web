@@ -1,644 +1,1183 @@
 import * as THREE from 'three';
 
 export interface ProceduralTextureSet {
+  teakDeckAlbedo: THREE.CanvasTexture;
+  teakDeckNormal: THREE.CanvasTexture;
+  teakDeckRoughness: THREE.CanvasTexture;
+  steelHullAlbedo: THREE.CanvasTexture;
+  steelHullNormal: THREE.CanvasTexture;
+  steelHullRoughness: THREE.CanvasTexture;
+  buffFunnelAlbedo: THREE.CanvasTexture;
+  buffFunnelNormal: THREE.CanvasTexture;
+  buffFunnelRoughness: THREE.CanvasTexture;
   mahoganyAlbedo: THREE.CanvasTexture;
   mahoganyRoughness: THREE.CanvasTexture;
-  teakDeckAlbedo: THREE.CanvasTexture;
-  teakDeckNormal: THREE.DataTexture;
-  steelHullAlbedo: THREE.CanvasTexture;
-  steelHullNormal: THREE.DataTexture;
-  compassDial: THREE.CanvasTexture;
-  telegraphDial: THREE.CanvasTexture;
-  clinometerDial: THREE.CanvasTexture;
+  interiorMarbleAlbedo: THREE.CanvasTexture;
+  interiorMarbleRoughness: THREE.CanvasTexture;
+  interiorPanelAlbedo: THREE.CanvasTexture;
   iceAlbedo: THREE.CanvasTexture;
-  iceNormal: THREE.DataTexture;
-  sprayParticle: THREE.CanvasTexture;
+  iceNormal: THREE.CanvasTexture;
+  iceRoughness: THREE.CanvasTexture;
   hullNameplateBow: THREE.CanvasTexture;
   hullNameplateStern: THREE.CanvasTexture;
+  hullNameplateBritannicBow: THREE.CanvasTexture;
+  hullNameplateBritannicStern: THREE.CanvasTexture;
+  hullNameplateLusitaniaBow: THREE.CanvasTexture;
+  hullNameplateLusitaniaStern: THREE.CanvasTexture;
+  hullNameplateConcordiaBow: THREE.CanvasTexture;
+  hullNameplateConcordiaStern: THREE.CanvasTexture;
   hullNameplateCarpathia: THREE.CanvasTexture;
   whiteStarPennant: THREE.CanvasTexture;
+  hospitalRedCrossFlag: THREE.CanvasTexture;
+  cunardBurgee: THREE.CanvasTexture;
+  costaFlag: THREE.CanvasTexture;
+  italianEnsignFlag: THREE.CanvasTexture;
+  redCrossEmblem: THREE.CanvasTexture;
   redEnsignFlag: THREE.CanvasTexture;
-  whiteEnsignFlag: THREE.CanvasTexture;
-  interiorMarbleAlbedo: THREE.CanvasTexture;
-  interiorPanelAlbedo: THREE.CanvasTexture;
+  cunardFunnelAlbedo: THREE.CanvasTexture;
+  costaFunnelAlbedo: THREE.CanvasTexture;
+  compassDial: THREE.CanvasTexture;
+  telegraphDial: THREE.CanvasTexture;
+  telegraphDialCunard: THREE.CanvasTexture;
+  telegraphDialCosta: THREE.CanvasTexture;
+  clinometerDial: THREE.CanvasTexture;
   dispose: () => void;
 }
 
-function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+function makeCanvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d')!;
   return [canvas, ctx];
 }
 
-function configureColorTexture(
-  canvas: HTMLCanvasElement,
-  maxAnisotropy: number,
-  repeatX = 1,
-  repeatY = 1,
-): THREE.CanvasTexture {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = maxAnisotropy;
-  tex.needsUpdate = true;
-  return tex;
+function seededNoise(x: number, y: number): number {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return s - Math.floor(s);
 }
 
-function configureDataTexture(
-  canvas: HTMLCanvasElement,
-  maxAnisotropy: number,
-  repeatX = 1,
-  repeatY = 1,
-): THREE.CanvasTexture {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = maxAnisotropy;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/**
- * Converts a grayscale height canvas into a tangent-space normal DataTexture (linear space).
- */
-function heightCanvasToNormalTexture(
-  canvas: HTMLCanvasElement,
+function heightMapToNormalTexture(
+  heightData: Float32Array,
+  size: number,
   strength: number,
-  maxAnisotropy: number,
-  repeatX = 1,
-  repeatY = 1,
-): THREE.DataTexture {
-  const w = canvas.width;
-  const h = canvas.height;
-  const ctx = canvas.getContext('2d')!;
-  const src = ctx.getImageData(0, 0, w, h).data;
-  const out = new Uint8Array(w * h * 4);
+  aniso: number,
+): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(size, size);
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
 
-  const sample = (x: number, y: number): number => {
-    const wx = ((x % w) + w) % w;
-    const wy = ((y % h) + h) % h;
-    return src[(wy * w + wx) * 4] / 255;
-  };
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const hL = sample(x - 1, y);
-      const hR = sample(x + 1, y);
-      const hU = sample(x, y - 1);
-      const hD = sample(x, y + 1);
+  for (let y = 0; y < size; y++) {
+    const ym = (y - 1 + size) % size;
+    const yp = (y + 1) % size;
+    for (let x = 0; x < size; x++) {
+      const xm = (x - 1 + size) % size;
+      const xp = (x + 1) % size;
+      const hL = heightData[y * size + xm];
+      const hR = heightData[y * size + xp];
+      const hU = heightData[ym * size + x];
+      const hD = heightData[yp * size + x];
 
       const dx = (hL - hR) * strength;
       const dy = (hU - hD) * strength;
       const dz = 1.0;
-      const invLen = 1 / Math.hypot(dx, dy, dz);
+      const invLen = 1.0 / Math.hypot(dx, dy, dz);
 
-      const idx = (y * w + x) * 4;
-      out[idx] = Math.round((dx * invLen * 0.5 + 0.5) * 255);
-      out[idx + 1] = Math.round((dy * invLen * 0.5 + 0.5) * 255);
-      out[idx + 2] = Math.round((dz * invLen * 0.5 + 0.5) * 255);
-      out[idx + 3] = 255;
+      const idx = (y * size + x) * 4;
+      data[idx] = Math.round((dx * invLen * 0.5 + 0.5) * 255);
+      data[idx + 1] = Math.round((dy * invLen * 0.5 + 0.5) * 255);
+      data[idx + 2] = Math.round((dz * invLen * 0.5 + 0.5) * 255);
+      data[idx + 3] = 255;
     }
   }
+  ctx.putImageData(img, 0, 0);
 
-  const tex = new THREE.DataTexture(out, w, h, THREE.RGBAFormat);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = maxAnisotropy;
+  tex.anisotropy = aniso;
   tex.needsUpdate = true;
   return tex;
 }
 
-export function createProceduralTextures(maxAnisotropy: number): ProceduralTextureSet {
-  // 1. Rich Quarter-Sawn Mahogany Albedo & Gloss-Varnish Roughness
-  const [mahCanvas, mahCtx] = makeCanvas(512, 512);
-  mahCtx.fillStyle = '#3a190f';
-  mahCtx.fillRect(0, 0, 512, 512);
-  for (let y = 0; y < 512; y++) {
-    const ribbon = Math.sin(y * 0.045) * 14 + Math.sin(y * 0.19) * 5;
-    const tone = Math.floor(40 + Math.sin((y + ribbon) * 0.13) * 16);
-    mahCtx.fillStyle = `rgb(${tone + 34}, ${Math.max(10, tone - 6)}, ${Math.max(5, tone - 18)})`;
-    mahCtx.fillRect(0, y, 512, 1);
-  }
-  for (let i = 0; i < 650; i++) {
-    const x = (i * 89) % 512;
-    const y = (i * 149) % 512;
-    mahCtx.fillStyle = i % 3 === 0 ? 'rgba(18, 5, 2, 0.22)' : 'rgba(112, 54, 28, 0.15)';
-    mahCtx.fillRect(x, y, 36 + (i % 78), 1.5);
-  }
-  const mahoganyAlbedo = configureColorTexture(mahCanvas, maxAnisotropy, 2, 2);
-
-  const [mahRCanvas, mahRCtx] = makeCanvas(256, 256);
-  mahRCtx.fillStyle = '#484848';
-  mahRCtx.fillRect(0, 0, 256, 256);
-  for (let y = 0; y < 256; y += 2) {
-    const v = 64 + Math.floor(Math.sin(y * 0.22) * 18);
-    mahRCtx.fillStyle = `rgb(${v},${v},${v})`;
-    mahRCtx.fillRect(0, y, 256, 2);
-  }
-  const mahoganyRoughness = configureDataTexture(mahRCanvas, maxAnisotropy, 2, 2);
-
-  // 2. Teak Deck Planking Albedo & Normal Map
-  const [teakCanvas, teakCtx] = makeCanvas(512, 512);
-  const [teakHCanvas, teakHCtx] = makeCanvas(512, 512);
-  teakCtx.fillStyle = '#8b6f4e';
-  teakCtx.fillRect(0, 0, 512, 512);
-  teakHCtx.fillStyle = '#d0d0d0';
-  teakHCtx.fillRect(0, 0, 512, 512);
+function createTeakTextures(aniso: number) {
+  const size = 1024;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+  const height = new Float32Array(size * size);
 
   const plankCount = 16;
-  const plankW = 512 / plankCount;
+  const plankW = size / plankCount;
+
+  aCtx.fillStyle = '#0d0b09';
+  aCtx.fillRect(0, 0, size, size);
+  rCtx.fillStyle = '#d8d8d8';
+  rCtx.fillRect(0, 0, size, size);
+
   for (let p = 0; p < plankCount; p++) {
-    const x = p * plankW;
-    const shade = ((p * 31) % 20) - 10;
-    teakCtx.fillStyle = `rgb(${138 + shade}, ${112 + shade}, ${82 + shade})`;
-    teakCtx.fillRect(x + 2, 0, plankW - 3, 512);
+    const px = p * plankW;
+    const toneShift = (seededNoise(p, 3.1) - 0.5) * 24;
+    const rBase = Math.round(146 + toneShift);
+    const gBase = Math.round(112 + toneShift * 0.85);
+    const bBase = Math.round(74 + toneShift * 0.65);
 
-    // Subtle longitudinal grain lines
-    for (let g = 0; g < 6; g++) {
-      teakCtx.fillStyle = g % 2 === 0 ? 'rgba(65, 45, 25, 0.12)' : 'rgba(175, 145, 108, 0.1)';
-      teakCtx.fillRect(x + 4 + g * 4, 0, 1.5, 512);
+    aCtx.fillStyle = `rgb(${rBase},${gBase},${bBase})`;
+    aCtx.fillRect(px + 3, 0, plankW - 6, size);
+
+    const roughVal = Math.round(188 + (seededNoise(p, 9.7) - 0.5) * 32);
+    rCtx.fillStyle = `rgb(${roughVal},${roughVal},${roughVal})`;
+    rCtx.fillRect(px + 3, 0, plankW - 6, size);
+
+    // Fine Burma teak grain fibers & cathedral streaks
+    for (let g = 0; g < 28; g++) {
+      const gx = px + 4 + seededNoise(p * 17 + g, 1.3) * (plankW - 9);
+      const dark = seededNoise(p, g * 2.1) > 0.44;
+      aCtx.strokeStyle = dark ? 'rgba(54, 34, 18, 0.24)' : 'rgba(196, 162, 118, 0.16)';
+      aCtx.lineWidth = 1.1 + seededNoise(g, p) * 1.4;
+      aCtx.beginPath();
+      aCtx.moveTo(gx, 0);
+      aCtx.bezierCurveTo(
+        gx + (seededNoise(g, 4) - 0.5) * 6,
+        size * 0.33,
+        gx + (seededNoise(g, 8) - 0.5) * 6,
+        size * 0.66,
+        gx,
+        size,
+      );
+      aCtx.stroke();
     }
 
-    // Caulked pitch seam
-    teakCtx.fillStyle = '#1f1914';
-    teakCtx.fillRect(x, 0, 2.2, 512);
-    teakHCtx.fillStyle = '#202020';
-    teakHCtx.fillRect(x, 0, 2.5, 512);
+    // Pitch-black oakum caulking & recessed plank joints + bronze dowels
+    const buttY = Math.round(((p * 37) % 100) * 0.01 * size);
+    aCtx.fillStyle = '#0e0c0a';
+    aCtx.fillRect(px, 0, 3, size);
+    aCtx.fillRect(px + plankW - 3, 0, 3, size);
+    aCtx.fillRect(px, buttY, plankW, 3);
 
-    const jointY = ((p * 173) % 380) + 60;
-    teakCtx.fillRect(x, jointY, plankW, 2);
-    teakHCtx.fillRect(x, jointY, plankW, 2);
-  }
-  const teakDeckAlbedo = configureColorTexture(teakCanvas, maxAnisotropy, 4, 14);
-  const teakDeckNormal = heightCanvasToNormalTexture(teakHCanvas, 2.4, maxAnisotropy, 4, 14);
+    rCtx.fillStyle = '#f2f2f2';
+    rCtx.fillRect(px, 0, 3, size);
+    rCtx.fillRect(px + plankW - 3, 0, 3, size);
 
-  // 3. Crisp Riveted Steel Hull Plates (Albedo + Normal Map)
-  const [hullCanvas, hullCtx] = makeCanvas(512, 512);
-  const [hullHCanvas, hullHCtx] = makeCanvas(512, 512);
-  hullCtx.fillStyle = '#141b24';
-  hullCtx.fillRect(0, 0, 512, 512);
-  hullHCtx.fillStyle = '#808080';
-  hullHCtx.fillRect(0, 0, 512, 512);
-
-  for (let row = 0; row < 8; row++) {
-    const y = row * 64;
-    const offset = (row % 2) * 64;
-    hullCtx.fillStyle = row % 2 === 0 ? '#1b2430' : '#131922';
-    hullCtx.fillRect(0, y, 512, 62);
-    hullHCtx.fillStyle = row % 2 === 0 ? '#a4a4a4' : '#767676';
-    hullHCtx.fillRect(0, y, 512, 62);
-
-    // Subtle salt/brushing horizontal micro-strakes
-    for (let s = 0; s < 5; s++) {
-      hullCtx.fillStyle = s % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.08)';
-      hullCtx.fillRect(0, y + 10 + s * 10, 512, 2);
+    for (const dy of [buttY - 12, buttY + 14]) {
+      const yy = (dy + size) % size;
+      aCtx.fillStyle = 'rgba(42, 28, 16, 0.72)';
+      aCtx.beginPath();
+      aCtx.arc(px + plankW * 0.28, yy, 2.2, 0, Math.PI * 2);
+      aCtx.arc(px + plankW * 0.72, yy, 2.2, 0, Math.PI * 2);
+      aCtx.fill();
     }
 
-    // Deep plate lap seam
-    hullCtx.fillStyle = '#070a0e';
-    hullCtx.fillRect(0, y + 61, 512, 3);
-    hullHCtx.fillStyle = '#242424';
-    hullHCtx.fillRect(0, y + 61, 512, 3);
-
-    // Vertical plate butt joints
-    for (let vx = offset; vx < 512; vx += 128) {
-      hullCtx.fillStyle = '#090d13';
-      hullCtx.fillRect(vx, y, 2.5, 64);
-      hullHCtx.fillStyle = '#2c2c2c';
-      hullHCtx.fillRect(vx, y, 2.5, 64);
-    }
-
-    // Crisp raised double-rivet rows
-    for (let r = 6; r < 512; r += 12) {
-      hullCtx.fillStyle = '#2d394a';
-      hullCtx.fillRect(r, y + 4, 3, 3);
-      hullCtx.fillRect(r, y + 54, 3, 3);
-
-      hullHCtx.fillStyle = '#e5e5e5';
-      hullHCtx.fillRect(r, y + 4, 3, 3);
-      hullHCtx.fillRect(r, y + 54, 3, 3);
+    for (let y = 0; y < size; y++) {
+      for (let x = Math.floor(px); x < Math.floor(px + plankW); x++) {
+        const localX = x - px;
+        const isSeam = localX < 3 || localX >= plankW - 3 || Math.abs(y - buttY) <= 1.5;
+        const grain = Math.sin(localX * 0.48 + Math.sin(y * 0.02 + p) * 2.2) * 0.04;
+        height[y * size + x] = isSeam ? 0.06 : 0.72 + grain + seededNoise(x * 0.2, y * 0.06) * 0.06;
+      }
     }
   }
-  const steelHullAlbedo = configureColorTexture(hullCanvas, maxAnisotropy, 12, 3.5);
-  const steelHullNormal = heightCanvasToNormalTexture(hullHCanvas, 3.3, maxAnisotropy, 12, 3.5);
 
-  // 4. Compass Card Dial
-  const [compCanvas, compCtx] = makeCanvas(512, 512);
-  compCtx.fillStyle = '#11151d';
-  compCtx.fillRect(0, 0, 512, 512);
-  compCtx.save();
-  compCtx.translate(256, 256);
-  const cardGrad = compCtx.createRadialGradient(0, 0, 10, 0, 0, 236);
-  cardGrad.addColorStop(0, '#fff9e4');
-  cardGrad.addColorStop(0.75, '#ecd9a8');
-  cardGrad.addColorStop(1, '#b59352');
-  compCtx.fillStyle = cardGrad;
-  compCtx.beginPath();
-  compCtx.arc(0, 0, 236, 0, Math.PI * 2);
-  compCtx.fill();
+  const teakDeckAlbedo = new THREE.CanvasTexture(albedoC);
+  teakDeckAlbedo.colorSpace = THREE.SRGBColorSpace;
+  teakDeckAlbedo.wrapS = THREE.RepeatWrapping;
+  teakDeckAlbedo.wrapT = THREE.RepeatWrapping;
+  teakDeckAlbedo.anisotropy = aniso;
+
+  const teakDeckRoughness = new THREE.CanvasTexture(roughC);
+  teakDeckRoughness.colorSpace = THREE.NoColorSpace;
+  teakDeckRoughness.wrapS = THREE.RepeatWrapping;
+  teakDeckRoughness.wrapT = THREE.RepeatWrapping;
+  teakDeckRoughness.anisotropy = aniso;
+
+  const teakDeckNormal = heightMapToNormalTexture(height, size, 2.8, aniso);
+  return { teakDeckAlbedo, teakDeckNormal, teakDeckRoughness };
+}
+
+function createSteelHullTextures(aniso: number) {
+  const size = 1024;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+  const height = new Float32Array(size * size);
+
+  const strakeCount = 12;
+  const strakeH = size / strakeCount;
+
+  for (let s = 0; s < strakeCount; s++) {
+    const sy = s * strakeH;
+    const isOutStrake = s % 2 === 0;
+    const plateShade = (seededNoise(s, 7.2) - 0.5) * 6;
+    const baseR = Math.round((isOutStrake ? 20 : 17) + plateShade);
+    const baseG = Math.round((isOutStrake ? 24 : 20) + plateShade);
+    const baseB = Math.round((isOutStrake ? 30 : 25) + plateShade);
+
+    // Subtle vertical strake gradient (plate curvature shadow near overlap)
+    const grad = aCtx.createLinearGradient(0, sy, 0, sy + strakeH);
+    grad.addColorStop(0, `rgb(${Math.max(8, baseR - 5)},${Math.max(10, baseG - 5)},${Math.max(14, baseB - 5)})`);
+    grad.addColorStop(0.18, `rgb(${baseR},${baseG},${baseB})`);
+    grad.addColorStop(0.88, `rgb(${baseR + 2},${baseG + 2},${baseB + 2})`);
+    grad.addColorStop(1, `rgb(${Math.max(8, baseR - 4)},${Math.max(10, baseG - 4)},${Math.max(14, baseB - 4)})`);
+    aCtx.fillStyle = grad;
+    aCtx.fillRect(0, sy, size, strakeH);
+
+    // Calibrated matte-satin marine hull enamel roughness (0.50 - 0.68 -> 128 - 174)
+    const rVal = Math.round((isOutStrake ? 142 : 156) + (seededNoise(s, 11.4) - 0.5) * 14);
+    rCtx.fillStyle = `rgb(${rVal},${rVal},${rVal})`;
+    rCtx.fillRect(0, sy, size, strakeH);
+
+    // Staggered vertical plate butt joints
+    for (let b = 0; b < 4; b++) {
+      const bx = Math.round(((b * 256 + (s % 2) * 128) % size));
+      aCtx.fillStyle = 'rgba(6, 9, 13, 0.72)';
+      aCtx.fillRect(bx, sy, 3, strakeH);
+      aCtx.fillStyle = 'rgba(72, 84, 98, 0.14)';
+      aCtx.fillRect((bx + 3) % size, sy, 2, strakeH);
+
+      // Vertical double rivet column along butt seam
+      for (let ry = sy + 8; ry < sy + strakeH - 4; ry += 10) {
+        aCtx.fillStyle = 'rgba(54, 62, 74, 0.34)';
+        aCtx.beginPath();
+        aCtx.arc((bx - 6 + size) % size, ry, 1.8, 0, Math.PI * 2);
+        aCtx.arc((bx + 7) % size, ry, 1.8, 0, Math.PI * 2);
+        aCtx.fill();
+      }
+    }
+
+    // Horizontal double-rivet strake line + delicate Atlantic salt/rust weathering streaks
+    aCtx.fillStyle = 'rgba(5, 8, 12, 0.78)';
+    aCtx.fillRect(0, sy, size, 3);
+    aCtx.fillStyle = 'rgba(64, 74, 88, 0.16)';
+    aCtx.fillRect(0, sy + 3, size, 2);
+
+    for (let rx = 8; rx < size; rx += 12) {
+      aCtx.fillStyle = 'rgba(58, 68, 82, 0.32)';
+      aCtx.beginPath();
+      aCtx.arc(rx, sy + 7, 1.7, 0, Math.PI * 2);
+      aCtx.arc(rx + 6, sy + 13, 1.5, 0, Math.PI * 2);
+      aCtx.fill();
+    }
+
+    // Subtle salt-spray / scupper weathering streak
+    for (let st = 0; st < 5; st++) {
+      if (seededNoise(s * 7, st * 13) > 0.62) {
+        const sx = seededNoise(s + st, 3.7) * size;
+        const streakGrad = aCtx.createLinearGradient(sx, sy + 4, sx, sy + strakeH);
+        streakGrad.addColorStop(0, 'rgba(92, 68, 48, 0.14)');
+        streakGrad.addColorStop(0.5, 'rgba(130, 145, 160, 0.06)');
+        streakGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        aCtx.fillStyle = streakGrad;
+        aCtx.fillRect(sx - 5, sy + 4, 10, strakeH - 4);
+      }
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const s = Math.floor(y / strakeH);
+    const ly = y - s * strakeH;
+    const isOutStrake = s % 2 === 0;
+    const plateBase = isOutStrake ? 0.62 : 0.48;
+    const seamDip = ly < 3.5 ? -0.30 : ly < 6.0 ? 0.06 : 0;
+    for (let x = 0; x < size; x++) {
+      const bxMod = (x - (s % 2) * 128 + size) % 256;
+      const buttDip = bxMod < 3 ? -0.26 : 0;
+      let rivet = 0;
+      if (ly >= 5 && ly <= 15 && (x % 12 < 4)) {
+        const dx = (x % 12) - 1.5;
+        const dy = (ly - 8);
+        if (dx * dx + dy * dy < 3.5) rivet = 0.24;
+      }
+      const warp = Math.sin(x * 0.032 + s * 1.9) * 0.028;
+      height[y * size + x] = plateBase + seamDip + buttDip + rivet + warp + (seededNoise(x * 0.4, y * 0.4) - 0.5) * 0.02;
+    }
+  }
+
+  const steelHullAlbedo = new THREE.CanvasTexture(albedoC);
+  steelHullAlbedo.colorSpace = THREE.SRGBColorSpace;
+  steelHullAlbedo.wrapS = THREE.RepeatWrapping;
+  steelHullAlbedo.wrapT = THREE.RepeatWrapping;
+  steelHullAlbedo.anisotropy = aniso;
+
+  const steelHullRoughness = new THREE.CanvasTexture(roughC);
+  steelHullRoughness.colorSpace = THREE.NoColorSpace;
+  steelHullRoughness.wrapS = THREE.RepeatWrapping;
+  steelHullRoughness.wrapT = THREE.RepeatWrapping;
+  steelHullRoughness.anisotropy = aniso;
+
+  const steelHullNormal = heightMapToNormalTexture(height, size, 3.1, aniso);
+  return { steelHullAlbedo, steelHullNormal, steelHullRoughness };
+}
+
+function createBuffFunnelTextures(aniso: number) {
+  const size = 512;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+  const height = new Float32Array(size * size);
+
+  // Authentic White Star Line mineral buff + subtle top-to-bottom coal soot patina
+  const baseGrad = aCtx.createLinearGradient(0, 0, 0, size);
+  baseGrad.addColorStop(0, '#c2864d');
+  baseGrad.addColorStop(0.18, '#d79e60');
+  baseGrad.addColorStop(0.82, '#d59c5d');
+  baseGrad.addColorStop(1, '#c48d53');
+  aCtx.fillStyle = baseGrad;
+  aCtx.fillRect(0, 0, size, size);
+
+  rCtx.fillStyle = '#9e9e9e';
+  rCtx.fillRect(0, 0, size, size);
+
+  const bands = 8;
+  const cols = 12;
+  const bh = size / bands;
+  const cw = size / cols;
+
+  for (let b = 0; b < bands; b++) {
+    const by = b * bh;
+    aCtx.fillStyle = 'rgba(90, 56, 26, 0.20)';
+    aCtx.fillRect(0, by, size, 2);
+    for (let c = 0; c < cols; c++) {
+      const cx = (c * cw + (b % 2) * cw * 0.5) % size;
+      aCtx.fillStyle = 'rgba(95, 62, 32, 0.14)';
+      aCtx.fillRect(cx, by, 1.5, bh);
+      // Rivets along seams
+      for (let rx = 6; rx < cw; rx += 10) {
+        aCtx.fillStyle = 'rgba(78, 48, 20, 0.22)';
+        aCtx.fillRect((cx + rx) % size, by + 3, 2, 2);
+      }
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const ly = y % bh;
+    const b = Math.floor(y / bh);
+    for (let x = 0; x < size; x++) {
+      const lx = (x - (b % 2) * (cw * 0.5) + size) % cw;
+      const seam = ly < 2 || lx < 1.5 ? -0.18 : 0;
+      height[y * size + x] = 0.6 + seam + (seededNoise(x * 0.25, y * 0.25) - 0.5) * 0.03;
+    }
+  }
+
+  const buffFunnelAlbedo = new THREE.CanvasTexture(albedoC);
+  buffFunnelAlbedo.colorSpace = THREE.SRGBColorSpace;
+  buffFunnelAlbedo.wrapS = THREE.RepeatWrapping;
+  buffFunnelAlbedo.wrapT = THREE.RepeatWrapping;
+  buffFunnelAlbedo.anisotropy = aniso;
+
+  const buffFunnelRoughness = new THREE.CanvasTexture(roughC);
+  buffFunnelRoughness.colorSpace = THREE.NoColorSpace;
+  buffFunnelRoughness.wrapS = THREE.RepeatWrapping;
+  buffFunnelRoughness.wrapT = THREE.RepeatWrapping;
+  buffFunnelRoughness.anisotropy = aniso;
+
+  const buffFunnelNormal = heightMapToNormalTexture(height, size, 2.0, aniso);
+
+  // Authentic Cunard Line Vermilion-Red funnel albedo (shares normal & roughness seam detail)
+  const [cunardC, cCtx] = makeCanvas(size, size);
+  const cGrad = cCtx.createLinearGradient(0, 0, 0, size);
+  cGrad.addColorStop(0, '#a8251a');
+  cGrad.addColorStop(0.18, '#c93323');
+  cGrad.addColorStop(0.82, '#cf3827');
+  cGrad.addColorStop(1, '#b2291b');
+  cCtx.fillStyle = cGrad;
+  cCtx.fillRect(0, 0, size, size);
+  for (let b = 0; b < bands; b++) {
+    const by = b * bh;
+    cCtx.fillStyle = 'rgba(54, 12, 8, 0.24)';
+    cCtx.fillRect(0, by, size, 2);
+    for (let c = 0; c < cols; c++) {
+      const cx = (c * cw + (b % 2) * cw * 0.5) % size;
+      cCtx.fillStyle = 'rgba(60, 14, 10, 0.16)';
+      cCtx.fillRect(cx, by, 1.5, bh);
+      for (let rx = 6; rx < cw; rx += 10) {
+        cCtx.fillStyle = 'rgba(48, 10, 6, 0.24)';
+        cCtx.fillRect((cx + rx) % size, by + 3, 2, 2);
+      }
+    }
+  }
+  const cunardFunnelAlbedo = new THREE.CanvasTexture(cunardC);
+  cunardFunnelAlbedo.colorSpace = THREE.SRGBColorSpace;
+  cunardFunnelAlbedo.wrapS = THREE.RepeatWrapping;
+  cunardFunnelAlbedo.wrapT = THREE.RepeatWrapping;
+  cunardFunnelAlbedo.anisotropy = aniso;
+
+  return { buffFunnelAlbedo, buffFunnelNormal, buffFunnelRoughness, cunardFunnelAlbedo };
+}
+
+function createMahoganyTextures(aniso: number) {
+  const size = 512;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+
+  const grad = aCtx.createLinearGradient(0, 0, size, 0);
+  grad.addColorStop(0, '#5a2315');
+  grad.addColorStop(0.3, '#6e2c1a');
+  grad.addColorStop(0.6, '#521e12');
+  grad.addColorStop(1, '#682918');
+  aCtx.fillStyle = grad;
+  aCtx.fillRect(0, 0, size, size);
+
+  // Satin hand-rubbed varnish (roughness ~ 0.42 - 0.54 -> 108 - 138, glare-free)
+  rCtx.fillStyle = '#767676';
+  rCtx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 240; i++) {
+    const y = (i / 240) * size;
+    const alpha = 0.08 + seededNoise(i, 4.1) * 0.14;
+    aCtx.strokeStyle = seededNoise(i, 8.2) > 0.45 ? `rgba(30, 9, 4, ${alpha})` : `rgba(128, 56, 30, ${alpha * 0.7})`;
+    aCtx.lineWidth = 1.4 + seededNoise(i, 2.3) * 2.2;
+    aCtx.beginPath();
+    aCtx.moveTo(0, y);
+    aCtx.bezierCurveTo(size * 0.3, y + Math.sin(i * 0.4) * 9, size * 0.7, y - Math.cos(i * 0.3) * 9, size, y);
+    aCtx.stroke();
+
+    const rVal = Math.round(108 + seededNoise(i, 5.1) * 32);
+    rCtx.strokeStyle = `rgb(${rVal},${rVal},${rVal})`;
+    rCtx.lineWidth = 2.0;
+    rCtx.stroke();
+  }
+
+  aCtx.strokeStyle = 'rgba(24, 9, 4, 0.65)';
+  aCtx.lineWidth = 4;
+  aCtx.strokeRect(10, 10, size - 20, size - 20);
+  aCtx.strokeStyle = 'rgba(155, 92, 48, 0.35)';
+  aCtx.lineWidth = 2;
+  aCtx.strokeRect(18, 18, size - 36, size - 36);
+
+  const mahoganyAlbedo = new THREE.CanvasTexture(albedoC);
+  mahoganyAlbedo.colorSpace = THREE.SRGBColorSpace;
+  mahoganyAlbedo.wrapS = THREE.RepeatWrapping;
+  mahoganyAlbedo.wrapT = THREE.RepeatWrapping;
+  mahoganyAlbedo.anisotropy = aniso;
+
+  const mahoganyRoughness = new THREE.CanvasTexture(roughC);
+  mahoganyRoughness.colorSpace = THREE.NoColorSpace;
+  mahoganyRoughness.wrapS = THREE.RepeatWrapping;
+  mahoganyRoughness.wrapT = THREE.RepeatWrapping;
+  mahoganyRoughness.anisotropy = aniso;
+
+  return { mahoganyAlbedo, mahoganyRoughness };
+}
+
+function createIceTextures(aniso: number) {
+  const size = 512;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+  const height = new Float32Array(size * size);
+
+  const grad = aCtx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#eef7fc');
+  grad.addColorStop(0.5, '#d8ecf7');
+  grad.addColorStop(1, '#c2e1f3');
+  aCtx.fillStyle = grad;
+  aCtx.fillRect(0, 0, size, size);
+
+  rCtx.fillStyle = '#8e8e8e';
+  rCtx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 65; i++) {
+    const x1 = seededNoise(i, 1.2) * size;
+    const y1 = seededNoise(i, 3.4) * size;
+    const x2 = x1 + (seededNoise(i, 5.6) - 0.5) * 200;
+    const y2 = y1 + (seededNoise(i, 7.8) - 0.5) * 200;
+    aCtx.strokeStyle = i % 2 === 0 ? 'rgba(116, 178, 214, 0.28)' : 'rgba(255, 255, 255, 0.34)';
+    aCtx.lineWidth = 1.5 + seededNoise(i, 9.1) * 5;
+    aCtx.beginPath();
+    aCtx.moveTo(x1, y1);
+    aCtx.lineTo(x2, y2);
+    aCtx.stroke();
+
+    const rv = Math.round(70 + seededNoise(i, 2.7) * 90);
+    rCtx.strokeStyle = `rgb(${rv},${rv},${rv})`;
+    rCtx.lineWidth = 3;
+    rCtx.stroke();
+  }
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const strata = Math.sin(y * 0.09 + Math.sin(x * 0.04) * 2.5) * 0.16;
+      const crag = Math.cos(x * 0.07 - y * 0.05) * 0.12;
+      const micro = seededNoise(x * 0.25, y * 0.25) * 0.10;
+      height[y * size + x] = 0.5 + strata + crag + micro;
+    }
+  }
+
+  const iceAlbedo = new THREE.CanvasTexture(albedoC);
+  iceAlbedo.colorSpace = THREE.SRGBColorSpace;
+  iceAlbedo.wrapS = THREE.RepeatWrapping;
+  iceAlbedo.wrapT = THREE.RepeatWrapping;
+  iceAlbedo.anisotropy = aniso;
+
+  const iceRoughness = new THREE.CanvasTexture(roughC);
+  iceRoughness.colorSpace = THREE.NoColorSpace;
+  iceRoughness.wrapS = THREE.RepeatWrapping;
+  iceRoughness.wrapT = THREE.RepeatWrapping;
+  iceRoughness.anisotropy = aniso;
+
+  const iceNormal = heightMapToNormalTexture(height, size, 2.6, aniso);
+  return { iceAlbedo, iceNormal, iceRoughness };
+}
+
+function createInteriorMarbleTextures(aniso: number) {
+  const size = 512;
+  const [albedoC, aCtx] = makeCanvas(size, size);
+  const [roughC, rCtx] = makeCanvas(size, size);
+
+  aCtx.fillStyle = '#e7dfd0';
+  aCtx.fillRect(0, 0, size, size);
+  rCtx.fillStyle = '#7e7e7e';
+  rCtx.fillRect(0, 0, size, size);
+
+  for (let t = 0; t < 4; t++) {
+    for (let s = 0; s < 4; s++) {
+      const tx = s * 128;
+      const ty = t * 128;
+      const isDark = (t + s) % 2 === 1;
+      aCtx.fillStyle = isDark ? '#cfc2ac' : '#ece4d6';
+      aCtx.fillRect(tx + 2, ty + 2, 124, 124);
+      aCtx.strokeStyle = 'rgba(130, 114, 92, 0.35)';
+      aCtx.lineWidth = 2;
+      aCtx.strokeRect(tx + 1, ty + 1, 126, 126);
+
+      for (let v = 0; v < 5; v++) {
+        aCtx.strokeStyle = isDark ? 'rgba(92, 78, 60, 0.16)' : 'rgba(165, 148, 122, 0.18)';
+        aCtx.lineWidth = 1.4;
+        aCtx.beginPath();
+        aCtx.moveTo(tx + 8, ty + seededNoise(t * 9 + v, s) * 120);
+        aCtx.bezierCurveTo(
+          tx + 44,
+          ty + seededNoise(s * 7, v + 2) * 120,
+          tx + 88,
+          ty + seededNoise(v * 3, t + 5) * 120,
+          tx + 120,
+          ty + seededNoise(s + t, v * 4) * 120,
+        );
+        aCtx.stroke();
+      }
+    }
+  }
+
+  const interiorMarbleAlbedo = new THREE.CanvasTexture(albedoC);
+  interiorMarbleAlbedo.colorSpace = THREE.SRGBColorSpace;
+  interiorMarbleAlbedo.wrapS = THREE.RepeatWrapping;
+  interiorMarbleAlbedo.wrapT = THREE.RepeatWrapping;
+  interiorMarbleAlbedo.anisotropy = aniso;
+
+  const interiorMarbleRoughness = new THREE.CanvasTexture(roughC);
+  interiorMarbleRoughness.colorSpace = THREE.NoColorSpace;
+  interiorMarbleRoughness.wrapS = THREE.RepeatWrapping;
+  interiorMarbleRoughness.wrapT = THREE.RepeatWrapping;
+  interiorMarbleRoughness.anisotropy = aniso;
+
+  return { interiorMarbleAlbedo, interiorMarbleRoughness };
+}
+
+function createInteriorPanelTexture(aniso: number): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = makeCanvas(size, size);
+  ctx.fillStyle = '#ddd3c0';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 4; i++) {
+    const px = i * 128 + 10;
+    ctx.fillStyle = '#e7dfd0';
+    ctx.fillRect(px, 16, 108, size - 32);
+    ctx.strokeStyle = '#9c8667';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(px, 16, 108, size - 32);
+    ctx.strokeStyle = '#c4b193';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px + 8, 24, 92, size - 48);
+  }
+  ctx.fillStyle = '#8b6e48';
+  ctx.fillRect(0, 0, size, 16);
+  ctx.fillRect(0, size - 16, size, 16);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createNameplateTexture(primary: string, secondary: string | undefined, aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(1024, 256);
+  ctx.clearRect(0, 0, 1024, 256);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const drawText = (txt: string, y: number, font: string, tracking: number) => {
+    ctx.font = font;
+    const chars = txt.split('');
+    const widths = chars.map((c) => ctx.measureText(c).width);
+    const totalW = widths.reduce((a, b) => a + b, 0) + tracking * Math.max(0, chars.length - 1);
+    let cx = 512 - totalW / 2;
+
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i];
+      const cw = widths[i];
+      const x = cx + cw / 2;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.fillText(ch, x + 2, y + 3);
+      const grad = ctx.createLinearGradient(0, y - 34, 0, y + 34);
+      grad.addColorStop(0, '#f8e19b');
+      grad.addColorStop(0.45, '#deb452');
+      grad.addColorStop(1, '#a67a22');
+      ctx.fillStyle = grad;
+      ctx.fillText(ch, x, y);
+      cx += cw + tracking;
+    }
+  };
+
+  if (secondary) {
+    drawText(primary, 92, '700 80px "Cormorant Garamond", Georgia, serif', 16);
+    drawText(secondary, 178, '700 50px "Cormorant Garamond", Georgia, serif', 13);
+  } else {
+    drawText(primary, 128, '700 94px "Cormorant Garamond", Georgia, serif', 20);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createWhiteStarPennantTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.clearRect(0, 0, 512, 256);
+  ctx.fillStyle = '#c81e28';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(512, 54);
+  ctx.lineTo(412, 128);
+  ctx.lineTo(512, 202);
+  ctx.lineTo(0, 256);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#f8fafc';
+  const cx = 195;
+  const cy = 128;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? 48 : 19;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createRedCrossEmblemTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#f4f6f8';
+  ctx.fillRect(0, 0, 512, 256);
+
+  ctx.strokeStyle = 'rgba(30, 41, 59, 0.28)';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(10, 10, 492, 236);
+
+  ctx.fillStyle = '#b91c1c';
+  const cx = 256;
+  const cy = 128;
+  const armW = 54;
+  const span = 166;
+  ctx.fillRect(cx - armW / 2, cy - span / 2, armW, span);
+  ctx.fillRect(cx - span / 2, cy - armW / 2, span, armW);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createHospitalRedCrossFlagTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#f5f7f9';
+  ctx.fillRect(0, 0, 512, 256);
+
+  ctx.fillStyle = '#c81e1c';
+  const cx = 256;
+  const cy = 128;
+  const armW = 52;
+  const span = 168;
+  ctx.fillRect(cx - armW / 2, cy - span / 2, armW, span);
+  ctx.fillRect(cx - span / 2, cy - armW / 2, span, armW);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createCunardBurgeeTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.clearRect(0, 0, 512, 256);
+  ctx.fillStyle = '#c81e28';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(512, 42);
+  ctx.lineTo(418, 128);
+  ctx.lineTo(512, 214);
+  ctx.lineTo(0, 256);
+  ctx.closePath();
+  ctx.fill();
+
+  // Stylized gold Cunard lion rampant silhouette holding terrestrial globe
+  ctx.fillStyle = '#f4d06f';
+  const cx = 195;
+  const cy = 132;
+  ctx.beginPath();
+  ctx.arc(cx + 38, cy - 10, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#92400e';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#f4d06f';
+  ctx.beginPath();
+  ctx.ellipse(cx - 10, cy + 4, 24, 38, -0.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx - 16, cy - 38, 17, 0, Math.PI * 2);
+  ctx.fill();
+  // Crown + tail + forepaws reaching for globe
+  ctx.fillRect(cx - 24, cy - 62, 16, 10);
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#f4d06f';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 4, cy - 18);
+  ctx.lineTo(cx + 22, cy - 14);
+  ctx.moveTo(cx - 8, cy + 28);
+  ctx.lineTo(cx - 32, cy + 62);
+  ctx.moveTo(cx + 2, cy + 28);
+  ctx.lineTo(cx + 16, cy + 62);
+  ctx.moveTo(cx - 30, cy + 12);
+  ctx.quadraticCurveTo(cx - 64, cy - 28, cx - 42, cy - 48);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createRedEnsignTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#b91c22';
+  ctx.fillRect(0, 0, 512, 256);
+
+  ctx.fillStyle = '#152c66';
+  ctx.fillRect(0, 0, 224, 128);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 20;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(224, 128);
+  ctx.moveTo(224, 0);
+  ctx.lineTo(0, 128);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#c81e24';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(224, 128);
+  ctx.moveTo(224, 0);
+  ctx.lineTo(0, 128);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(92, 0, 40, 128);
+  ctx.fillRect(0, 46, 224, 36);
+  ctx.fillStyle = '#c81e24';
+  ctx.fillRect(100, 0, 24, 128);
+  ctx.fillRect(0, 53, 224, 22);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createCostaFunnelTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#f2c016';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle vertical panel seam lines
+  ctx.strokeStyle = 'rgba(130, 96, 8, 0.22)';
+  ctx.lineWidth = 2;
+  for (let x = 0; x < 512; x += 64) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 512);
+    ctx.stroke();
+  }
+
+  // Deep navy Costa Crociere top band & "C" logo emblems on port and starboard flanks
+  ctx.fillStyle = '#073573';
+  ctx.fillRect(0, 0, 512, 92);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 92, 512, 12);
+
+  for (const cx of [128, 384]) {
+    const cy = 285;
+    ctx.fillStyle = '#073573';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 86, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f2c016';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 66, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#073573';
+    ctx.beginPath();
+    ctx.arc(cx + 6, cy, 46, 0.45, Math.PI * 2 - 0.45);
+    ctx.lineTo(cx + 6, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#f2c016';
+    ctx.beginPath();
+    ctx.arc(cx + 12, cy, 24, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createCostaFlagTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#f2c016';
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.fillStyle = '#073573';
+  ctx.fillRect(0, 0, 512, 42);
+  ctx.fillRect(0, 214, 512, 42);
+  ctx.beginPath();
+  ctx.arc(256, 128, 62, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f2c016';
+  ctx.beginPath();
+  ctx.arc(262, 128, 42, 0.48, Math.PI * 2 - 0.48);
+  ctx.lineTo(262, 128);
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createItalianEnsignTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#009246';
+  ctx.fillRect(0, 0, 171, 256);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(171, 0, 170, 256);
+  ctx.fillStyle = '#ce2b37';
+  ctx.fillRect(341, 0, 171, 256);
+
+  // Maritime Republic shield accent in center white stripe
+  ctx.fillStyle = '#0b3b82';
+  ctx.fillRect(228, 92, 56, 72);
+  ctx.strokeStyle = '#d4af37';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(228, 92, 56, 72);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createCompassDialTexture(aniso: number): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = makeCanvas(size, size);
+  const cx = size / 2;
+  const cy = size / 2;
+
+  ctx.fillStyle = '#f2e8cf';
+  ctx.beginPath();
+  ctx.arc(cx, cy, cx - 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#201812';
+  ctx.lineWidth = 6;
+  ctx.stroke();
 
   for (let deg = 0; deg < 360; deg += 5) {
-    const rad = (deg * Math.PI) / 180;
+    const rad = ((deg - 90) * Math.PI) / 180;
     const isMajor = deg % 30 === 0;
-    const isMid = deg % 10 === 0;
-    const rOuter = 230;
-    const rInner = isMajor ? 196 : isMid ? 208 : 218;
-    compCtx.strokeStyle = '#1e1b16';
-    compCtx.lineWidth = isMajor ? 4 : isMid ? 2.5 : 1.5;
-    compCtx.beginPath();
-    compCtx.moveTo(Math.cos(rad) * rInner, Math.sin(rad) * rInner);
-    compCtx.lineTo(Math.cos(rad) * rOuter, Math.sin(rad) * rOuter);
-    compCtx.stroke();
+    const isMid = deg % 15 === 0;
+    const r0 = cx - 14;
+    const r1 = isMajor ? cx - 42 : isMid ? cx - 30 : cx - 22;
+    ctx.strokeStyle = isMajor ? '#181410' : '#504234';
+    ctx.lineWidth = isMajor ? 4 : 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(rad) * r0, cy + Math.sin(rad) * r0);
+    ctx.lineTo(cx + Math.cos(rad) * r1, cy + Math.sin(rad) * r1);
+    ctx.stroke();
   }
-  compCtx.font = 'bold 34px Georgia, serif';
-  compCtx.textAlign = 'center';
-  compCtx.textBaseline = 'middle';
-  const labels: Array<[string, number, string]> = [
-    ['N', -Math.PI / 2, '#991b1b'],
-    ['E', 0, '#1b1610'],
-    ['S', Math.PI / 2, '#1b1610'],
-    ['W', Math.PI, '#1b1610'],
+
+  ctx.fillStyle = '#991b1b';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 135);
+  ctx.lineTo(cx - 18, cy - 30);
+  ctx.lineTo(cx + 18, cy - 30);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#18181b';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + 135);
+  ctx.lineTo(cx - 18, cy + 30);
+  ctx.lineTo(cx + 18, cy + 30);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 44px Georgia, serif';
+  ctx.fillStyle = '#991b1b';
+  ctx.fillText('N', cx, cy - 165);
+  ctx.fillStyle = '#181410';
+  ctx.fillText('E', cx + 165, cy);
+  ctx.fillText('S', cx, cy + 165);
+  ctx.fillText('W', cx - 165, cy);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createTelegraphDialTexture(aniso: number, brandText = 'WHITE STAR'): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = makeCanvas(size, size);
+  const cx = size / 2;
+  const cy = size / 2;
+
+  ctx.fillStyle = '#f8f2e4';
+  ctx.beginPath();
+  ctx.arc(cx, cy, cx - 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  const segments = [
+    { start: -130, end: -75, color: '#991b1b', label: 'ASTERN' },
+    { start: -75, end: -35, color: '#1e293b', label: 'STOP' },
+    { start: -35, end: 5, color: '#334155', label: 'SLOW' },
+    { start: 5, end: 45, color: '#1d4ed8', label: 'HALF' },
+    { start: 45, end: 90, color: '#0f172a', label: 'FULL' },
+    { start: 90, end: 132, color: '#b45309', label: 'FLANK' },
   ];
-  for (const [text, ang, col] of labels) {
-    compCtx.fillStyle = col;
-    compCtx.fillText(text, Math.cos(ang) * 155, Math.sin(ang) * 155);
+
+  for (const s of segments) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, cx - 18, ((s.start - 90) * Math.PI) / 180, ((s.end - 90) * Math.PI) / 180);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
   }
-  compCtx.fillStyle = '#2d2418';
-  for (let i = 0; i < 8; i++) {
-    const a = (i * Math.PI) / 4;
-    compCtx.beginPath();
-    compCtx.moveTo(0, 0);
-    compCtx.lineTo(Math.cos(a - 0.16) * 40, Math.sin(a - 0.16) * 40);
-    compCtx.lineTo(Math.cos(a) * (i % 2 === 0 ? 115 : 75), Math.sin(a) * (i % 2 === 0 ? 115 : 75));
-    compCtx.lineTo(Math.cos(a + 0.16) * 40, Math.sin(a + 0.16) * 40);
-    compCtx.closePath();
-    compCtx.fill();
+
+  ctx.fillStyle = '#f8f2e4';
+  ctx.beginPath();
+  ctx.arc(cx, cy, cx - 105, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#9b7b38';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cx - 18, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 22px Georgia, serif';
+  ctx.fillStyle = '#ffffff';
+  for (const s of segments) {
+    const mid = (((s.start + s.end) / 2 - 90) * Math.PI) / 180;
+    const rx = cx + Math.cos(mid) * (cx - 60);
+    const ry = cy + Math.sin(mid) * (cx - 60);
+    ctx.save();
+    ctx.translate(rx, ry);
+    ctx.rotate(mid + Math.PI / 2);
+    ctx.fillText(s.label, 0, 0);
+    ctx.restore();
   }
-  compCtx.restore();
-  const compassDial = configureColorTexture(compCanvas, maxAnisotropy, 1, 1);
-  compassDial.wrapS = THREE.ClampToEdgeWrapping;
-  compassDial.wrapT = THREE.ClampToEdgeWrapping;
 
-  // 5. Chadburn Engine Telegraph Dial
-  const [teleCanvas, teleCtx] = makeCanvas(512, 512);
-  teleCtx.fillStyle = '#14171d';
-  teleCtx.fillRect(0, 0, 512, 512);
-  teleCtx.save();
-  teleCtx.translate(256, 256);
-  teleCtx.fillStyle = '#f5ecd2';
-  teleCtx.beginPath();
-  teleCtx.arc(0, 0, 232, 0, Math.PI * 2);
-  teleCtx.fill();
-  teleCtx.strokeStyle = '#8b6a2b';
-  teleCtx.lineWidth = 14;
-  teleCtx.stroke();
+  ctx.fillStyle = '#1f2937';
+  ctx.font = '700 24px Georgia, serif';
+  ctx.fillText(brandText, cx, cy + 72);
 
-  const sectors: Array<{ text: string; angle: number; bg: string; fg: string }> = [
-    { text: 'ASTERN', angle: -1.15, bg: '#7f1d1d', fg: '#fef2f2' },
-    { text: 'STOP', angle: -0.68, bg: '#334155', fg: '#f8fafc' },
-    { text: 'SLOW', angle: -0.22, bg: '#e6d7b0', fg: '#1e293b' },
-    { text: 'HALF', angle: 0.25, bg: '#e6d7b0', fg: '#1e293b' },
-    { text: 'FULL', angle: 0.72, bg: '#1e3a5f', fg: '#f8fafc' },
-    { text: 'FLANK', angle: 1.18, bg: '#92400e', fg: '#fef3c7' },
-  ];
-  const halfSpan = 0.23;
-  for (const s of sectors) {
-    const a0 = s.angle - Math.PI / 2 - halfSpan;
-    const a1 = s.angle - Math.PI / 2 + halfSpan;
-    teleCtx.fillStyle = s.bg;
-    teleCtx.beginPath();
-    teleCtx.moveTo(0, 0);
-    teleCtx.arc(0, 0, 220, a0, a1);
-    teleCtx.closePath();
-    teleCtx.fill();
-    teleCtx.strokeStyle = '#1f2937';
-    teleCtx.lineWidth = 3;
-    teleCtx.stroke();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
 
-    teleCtx.save();
-    teleCtx.rotate(s.angle);
-    teleCtx.fillStyle = s.fg;
-    teleCtx.font = 'bold 24px Georgia, serif';
-    teleCtx.textAlign = 'center';
-    teleCtx.fillText(s.text, 0, -155);
-    teleCtx.restore();
+function createClinometerDialTexture(aniso: number): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = makeCanvas(size, size);
+  const cx = size / 2;
+  const cy = size / 2;
+
+  ctx.fillStyle = '#f4ebd4';
+  ctx.beginPath();
+  ctx.arc(cx, cy, cx - 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#292218';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  for (let d = -30; d <= 30; d += 5) {
+    const a = ((d + 90) * Math.PI) / 180;
+    const r0 = cx - 12;
+    const r1 = d % 10 === 0 ? cx - 34 : cx - 22;
+    ctx.strokeStyle = Math.abs(d) >= 20 ? '#991b1b' : '#26201a';
+    ctx.lineWidth = d % 10 === 0 ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+    ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    ctx.stroke();
   }
-  teleCtx.fillStyle = '#b48a3e';
-  teleCtx.beginPath();
-  teleCtx.arc(0, 0, 48, 0, Math.PI * 2);
-  teleCtx.fill();
-  teleCtx.fillStyle = '#1e2430';
-  teleCtx.font = 'bold 18px Georgia, serif';
-  teleCtx.textAlign = 'center';
-  teleCtx.fillText('WHITE STAR', 0, 96);
-  teleCtx.restore();
-  const telegraphDial = configureColorTexture(teleCanvas, maxAnisotropy, 1, 1);
-  telegraphDial.wrapS = THREE.ClampToEdgeWrapping;
-  telegraphDial.wrapT = THREE.ClampToEdgeWrapping;
 
-  // 6. Clinometer (Heel Angle Gauge) Dial
-  const [clinCanvas, clinCtx] = makeCanvas(256, 256);
-  clinCtx.fillStyle = '#f3ebd0';
-  clinCtx.fillRect(0, 0, 256, 256);
-  clinCtx.save();
-  clinCtx.translate(128, 128);
-  clinCtx.strokeStyle = '#292218';
-  clinCtx.lineWidth = 4;
-  clinCtx.beginPath();
-  clinCtx.arc(0, 0, 110, 0.2, Math.PI - 0.2);
-  clinCtx.stroke();
-  for (let deg = -40; deg <= 40; deg += 5) {
-    const rad = Math.PI / 2 + (deg * Math.PI) / 180;
-    const inner = deg % 10 === 0 ? 84 : 96;
-    clinCtx.lineWidth = deg % 10 === 0 ? 3 : 1.5;
-    clinCtx.beginPath();
-    clinCtx.moveTo(Math.cos(rad) * inner, Math.sin(rad) * inner);
-    clinCtx.lineTo(Math.cos(rad) * 110, Math.sin(rad) * 110);
-    clinCtx.stroke();
-  }
-  clinCtx.fillStyle = '#1e2430';
-  clinCtx.font = 'bold 16px Georgia, serif';
-  clinCtx.textAlign = 'center';
-  clinCtx.fillText('CLINOMETER', 0, -45);
-  clinCtx.restore();
-  const clinometerDial = configureColorTexture(clinCanvas, maxAnisotropy, 1, 1);
-  clinometerDial.wrapS = THREE.ClampToEdgeWrapping;
-  clinometerDial.wrapT = THREE.ClampToEdgeWrapping;
+  ctx.fillStyle = '#292218';
+  ctx.textAlign = 'center';
+  ctx.font = '700 18px Georgia, serif';
+  ctx.fillText('LIST', cx, cy - 28);
 
-  // 7. Glacial Ice Albedo & Normal Map
-  const [iceCanvas, iceCtx] = makeCanvas(512, 512);
-  const [iceHCanvas, iceHCtx] = makeCanvas(512, 512);
-  iceCtx.fillStyle = '#cbe5f6';
-  iceCtx.fillRect(0, 0, 512, 512);
-  iceHCtx.fillStyle = '#808080';
-  iceHCtx.fillRect(0, 0, 512, 512);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
 
-  for (let i = 0; i < 950; i++) {
-    const x = (i * 53) % 512;
-    const y = (i * 97) % 512;
-    const w = 14 + (i % 48);
-    const h = 10 + ((i * 7) % 36);
-    iceCtx.fillStyle =
-      i % 3 === 0
-        ? 'rgba(242, 250, 255, 0.28)'
-        : i % 3 === 1
-          ? 'rgba(110, 178, 224, 0.22)'
-          : 'rgba(56, 126, 178, 0.16)';
-    iceCtx.fillRect(x, y, w, h);
+export function createProceduralTextures(maxAnisotropy = 8): ProceduralTextureSet {
+  const aniso = Math.min(8, Math.max(1, maxAnisotropy));
+  const teak = createTeakTextures(aniso);
+  const steel = createSteelHullTextures(aniso);
+  const funnel = createBuffFunnelTextures(aniso);
+  const mahogany = createMahoganyTextures(aniso);
+  const marble = createInteriorMarbleTextures(aniso);
+  const interiorPanelAlbedo = createInteriorPanelTexture(aniso);
+  const ice = createIceTextures(aniso);
+  const hullNameplateBow = createNameplateTexture('TITANIC', undefined, aniso);
+  const hullNameplateStern = createNameplateTexture('TITANIC', 'LIVERPOOL', aniso);
+  const hullNameplateBritannicBow = createNameplateTexture('BRITANNIC', undefined, aniso);
+  const hullNameplateBritannicStern = createNameplateTexture('BRITANNIC', 'LIVERPOOL', aniso);
+  const hullNameplateLusitaniaBow = createNameplateTexture('LUSITANIA', undefined, aniso);
+  const hullNameplateLusitaniaStern = createNameplateTexture('LUSITANIA', 'LIVERPOOL', aniso);
+  const hullNameplateConcordiaBow = createNameplateTexture('COSTA CONCORDIA', undefined, aniso);
+  const hullNameplateConcordiaStern = createNameplateTexture('COSTA CONCORDIA', 'GENOVA', aniso);
+  const hullNameplateCarpathia = createNameplateTexture('CARPATHIA', undefined, aniso);
+  const whiteStarPennant = createWhiteStarPennantTexture(aniso);
+  const hospitalRedCrossFlag = createHospitalRedCrossFlagTexture(aniso);
+  const cunardBurgee = createCunardBurgeeTexture(aniso);
+  const costaFlag = createCostaFlagTexture(aniso);
+  const italianEnsignFlag = createItalianEnsignTexture(aniso);
+  const redCrossEmblem = createRedCrossEmblemTexture(aniso);
+  const redEnsignFlag = createRedEnsignTexture(aniso);
+  const costaFunnelAlbedo = createCostaFunnelTexture(aniso);
+  const compassDial = createCompassDialTexture(aniso);
+  const telegraphDial = createTelegraphDialTexture(aniso, 'WHITE STAR');
+  const telegraphDialCunard = createTelegraphDialTexture(aniso, 'CUNARD LINE');
+  const telegraphDialCosta = createTelegraphDialTexture(aniso, 'COSTA CROCIERE');
+  const clinometerDial = createClinometerDialTexture(aniso);
 
-    const hv = 85 + ((i * 23) % 135);
-    iceHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
-    iceHCtx.beginPath();
-    iceHCtx.moveTo(x, y);
-    iceHCtx.lineTo(x + w * 0.85, y + h * 0.25);
-    iceHCtx.lineTo(x + w * 0.35, y + h);
-    iceHCtx.closePath();
-    iceHCtx.fill();
-  }
-  const iceAlbedo = configureColorTexture(iceCanvas, maxAnisotropy, 2, 2);
-  const iceNormal = heightCanvasToNormalTexture(iceHCanvas, 2.2, maxAnisotropy, 2, 2);
-
-  // 8. Soft radial spray particle
-  const [sprayCanvas, sprayCtx] = makeCanvas(128, 128);
-  const sGrad = sprayCtx.createRadialGradient(64, 64, 4, 64, 64, 60);
-  sGrad.addColorStop(0, 'rgba(235, 246, 255, 0.95)');
-  sGrad.addColorStop(0.45, 'rgba(195, 225, 248, 0.45)');
-  sGrad.addColorStop(1, 'rgba(180, 220, 250, 0)');
-  sprayCtx.fillStyle = sGrad;
-  sprayCtx.fillRect(0, 0, 128, 128);
-  const sprayParticle = configureColorTexture(sprayCanvas, maxAnisotropy, 1, 1);
-  sprayParticle.wrapS = THREE.ClampToEdgeWrapping;
-  sprayParticle.wrapT = THREE.ClampToEdgeWrapping;
-
-  // 9. Hull Bow Nameplate ("TITANIC") & Stern Nameplate ("TITANIC · LIVERPOOL")
-  const [bowNameCanvas, bowNameCtx] = makeCanvas(512, 128);
-  bowNameCtx.clearRect(0, 0, 512, 128);
-  bowNameCtx.fillStyle = '#e7bf62';
-  bowNameCtx.strokeStyle = '#6c4d14';
-  bowNameCtx.lineWidth = 3;
-  bowNameCtx.font = 'bold 74px Georgia, "Times New Roman", serif';
-  bowNameCtx.textAlign = 'center';
-  bowNameCtx.textBaseline = 'middle';
-  bowNameCtx.strokeText('T I T A N I C', 256, 66);
-  bowNameCtx.fillText('T I T A N I C', 256, 66);
-  const hullNameplateBow = configureColorTexture(bowNameCanvas, maxAnisotropy, 1, 1);
-  hullNameplateBow.wrapS = THREE.ClampToEdgeWrapping;
-  hullNameplateBow.wrapT = THREE.ClampToEdgeWrapping;
-
-  const [sternNameCanvas, sternNameCtx] = makeCanvas(512, 160);
-  sternNameCtx.clearRect(0, 0, 512, 160);
-  sternNameCtx.fillStyle = '#e7bf62';
-  sternNameCtx.strokeStyle = '#6c4d14';
-  sternNameCtx.lineWidth = 2.5;
-  sternNameCtx.font = 'bold 58px Georgia, "Times New Roman", serif';
-  sternNameCtx.textAlign = 'center';
-  sternNameCtx.textBaseline = 'middle';
-  sternNameCtx.strokeText('T I T A N I C', 256, 56);
-  sternNameCtx.fillText('T I T A N I C', 256, 56);
-  sternNameCtx.font = 'bold 34px Georgia, "Times New Roman", serif';
-  sternNameCtx.strokeText('L I V E R P O O L', 256, 118);
-  sternNameCtx.fillText('L I V E R P O O L', 256, 118);
-  const hullNameplateStern = configureColorTexture(sternNameCanvas, maxAnisotropy, 1, 1);
-  hullNameplateStern.wrapS = THREE.ClampToEdgeWrapping;
-  hullNameplateStern.wrapT = THREE.ClampToEdgeWrapping;
-
-  const [carpNameCanvas, carpNameCtx] = makeCanvas(512, 128);
-  carpNameCtx.clearRect(0, 0, 512, 128);
-  carpNameCtx.fillStyle = '#e7bf62';
-  carpNameCtx.strokeStyle = '#6c4d14';
-  carpNameCtx.lineWidth = 2.5;
-  carpNameCtx.font = 'bold 62px Georgia, "Times New Roman", serif';
-  carpNameCtx.textAlign = 'center';
-  carpNameCtx.textBaseline = 'middle';
-  carpNameCtx.strokeText('C A R P A T H I A', 256, 66);
-  carpNameCtx.fillText('C A R P A T H I A', 256, 66);
-  const hullNameplateCarpathia = configureColorTexture(carpNameCanvas, maxAnisotropy, 1, 1);
-  hullNameplateCarpathia.wrapS = THREE.ClampToEdgeWrapping;
-  hullNameplateCarpathia.wrapT = THREE.ClampToEdgeWrapping;
-
-  // 10. White Star Line Burgee Pennant (Red swallowtail with 5-pointed white star)
-  const [wsCanvas, wsCtx] = makeCanvas(256, 128);
-  wsCtx.clearRect(0, 0, 256, 128);
-  wsCtx.fillStyle = '#b91c1c';
-  wsCtx.beginPath();
-  wsCtx.moveTo(0, 8);
-  wsCtx.lineTo(256, 26);
-  wsCtx.lineTo(192, 64);
-  wsCtx.lineTo(256, 102);
-  wsCtx.lineTo(0, 120);
-  wsCtx.closePath();
-  wsCtx.fill();
-  wsCtx.fillStyle = '#f8fafc';
-  wsCtx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const r = i % 2 === 0 ? 32 : 13;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const sx = 88 + Math.cos(a) * r;
-    const sy = 64 + Math.sin(a) * r;
-    if (i === 0) wsCtx.moveTo(sx, sy);
-    else wsCtx.lineTo(sx, sy);
-  }
-  wsCtx.closePath();
-  wsCtx.fill();
-  const whiteStarPennant = configureColorTexture(wsCanvas, maxAnisotropy, 1, 1);
-  whiteStarPennant.wrapS = THREE.ClampToEdgeWrapping;
-  whiteStarPennant.wrapT = THREE.ClampToEdgeWrapping;
-
-  // 11. British Merchant Marine Red Ensign
-  const [ensCanvas, ensCtx] = makeCanvas(256, 128);
-  ensCtx.fillStyle = '#b91c1c';
-  ensCtx.fillRect(0, 0, 256, 128);
-  ensCtx.fillStyle = '#1e3a8a';
-  ensCtx.fillRect(0, 0, 118, 64);
-  ensCtx.strokeStyle = '#f8fafc';
-  ensCtx.lineWidth = 10;
-  ensCtx.beginPath();
-  ensCtx.moveTo(0, 0);
-  ensCtx.lineTo(118, 64);
-  ensCtx.moveTo(118, 0);
-  ensCtx.lineTo(0, 64);
-  ensCtx.stroke();
-  ensCtx.fillStyle = '#f8fafc';
-  ensCtx.fillRect(50, 0, 18, 64);
-  ensCtx.fillRect(0, 23, 118, 18);
-  ensCtx.fillStyle = '#dc2626';
-  ensCtx.fillRect(54, 0, 10, 64);
-  ensCtx.fillRect(0, 27, 118, 10);
-  const redEnsignFlag = configureColorTexture(ensCanvas, maxAnisotropy, 1, 1);
-  redEnsignFlag.wrapS = THREE.ClampToEdgeWrapping;
-  redEnsignFlag.wrapT = THREE.ClampToEdgeWrapping;
-
-  // 11B. Royal Navy White Ensign (White field, Red St. George Cross, Union Jack Canton)
-  const [wensCanvas, wensCtx] = makeCanvas(256, 128);
-  wensCtx.fillStyle = '#f4f6fa';
-  wensCtx.fillRect(0, 0, 256, 128);
-  // St George's Cross
-  wensCtx.fillStyle = '#b91c1c';
-  wensCtx.fillRect(116, 0, 24, 128);
-  wensCtx.fillRect(0, 52, 256, 24);
-  // Union Flag in upper-left canton
-  wensCtx.fillStyle = '#1e3a8a';
-  wensCtx.fillRect(0, 0, 116, 52);
-  wensCtx.strokeStyle = '#f8fafc';
-  wensCtx.lineWidth = 9;
-  wensCtx.beginPath();
-  wensCtx.moveTo(0, 0);
-  wensCtx.lineTo(116, 52);
-  wensCtx.moveTo(116, 0);
-  wensCtx.lineTo(0, 52);
-  wensCtx.stroke();
-  wensCtx.fillStyle = '#f8fafc';
-  wensCtx.fillRect(49, 0, 18, 52);
-  wensCtx.fillRect(0, 17, 116, 18);
-  wensCtx.fillStyle = '#dc2626';
-  wensCtx.fillRect(53, 0, 10, 52);
-  wensCtx.fillRect(0, 21, 116, 10);
-  const whiteEnsignFlag = configureColorTexture(wensCanvas, maxAnisotropy, 1, 1);
-  whiteEnsignFlag.wrapS = THREE.ClampToEdgeWrapping;
-  whiteEnsignFlag.wrapT = THREE.ClampToEdgeWrapping;
-
-  // 12. First-Class Checkered Parquet / Linoleum Marble Floor (Reception & Dining Saloon)
-  const [marbCanvas, marbCtx] = makeCanvas(512, 512);
-  const tile = 64;
-  for (let ty = 0; ty < 8; ty++) {
-    for (let tx = 0; tx < 8; tx++) {
-      const dark = (tx + ty) % 2 === 0;
-      marbCtx.fillStyle = dark ? '#20242c' : '#e7ddc6';
-      marbCtx.fillRect(tx * tile, ty * tile, tile, tile);
-      // Subtle marble veining inside each square
-      marbCtx.strokeStyle = dark ? 'rgba(130, 145, 165, 0.14)' : 'rgba(155, 132, 95, 0.18)';
-      marbCtx.lineWidth = 1.5;
-      marbCtx.beginPath();
-      marbCtx.moveTo(tx * tile + 6, ty * tile + 14);
-      marbCtx.bezierCurveTo(
-        tx * tile + 24,
-        ty * tile + 30,
-        tx * tile + 40,
-        ty * tile + 18,
-        tx * tile + tile - 6,
-        ty * tile + tile - 10,
-      );
-      marbCtx.stroke();
-      // Gold hairline border
-      marbCtx.strokeStyle = 'rgba(164, 126, 62, 0.25)';
-      marbCtx.lineWidth = 1;
-      marbCtx.strokeRect(tx * tile + 0.5, ty * tile + 0.5, tile - 1, tile - 1);
-    }
-  }
-  const interiorMarbleAlbedo = configureColorTexture(marbCanvas, maxAnisotropy, 6, 8);
-
-  // 13. Edwardian Georgian Cream & Oak Wainscot Interior Wall Paneling
-  const [panCanvas, panCtx] = makeCanvas(512, 512);
-  panCtx.fillStyle = '#eae1cc';
-  panCtx.fillRect(0, 0, 512, 512);
-  // Lower oak dado rail & wainscoting
-  panCtx.fillStyle = '#6e4526';
-  panCtx.fillRect(0, 355, 512, 157);
-  panCtx.fillStyle = '#c49b4d';
-  panCtx.fillRect(0, 350, 512, 7);
-  // Carved recessed molding frames
-  for (let px = 18; px < 512; px += 128) {
-    panCtx.strokeStyle = '#c8b896';
-    panCtx.lineWidth = 5;
-    panCtx.strokeRect(px, 32, 92, 290);
-    panCtx.strokeStyle = '#9c7c46';
-    panCtx.lineWidth = 2;
-    panCtx.strokeRect(px + 10, 44, 72, 266);
-    // Wainscot oak inset
-    panCtx.strokeStyle = '#472914';
-    panCtx.lineWidth = 4;
-    panCtx.strokeRect(px, 376, 92, 114);
-  }
-  const interiorPanelAlbedo = configureColorTexture(panCanvas, maxAnisotropy, 4, 1);
-
-  return {
-    mahoganyAlbedo,
-    mahoganyRoughness,
-    teakDeckAlbedo,
-    teakDeckNormal,
-    steelHullAlbedo,
-    steelHullNormal,
-    compassDial,
-    telegraphDial,
-    clinometerDial,
-    iceAlbedo,
-    iceNormal,
-    sprayParticle,
+  const all: THREE.Texture[] = [
+    teak.teakDeckAlbedo,
+    teak.teakDeckNormal,
+    teak.teakDeckRoughness,
+    steel.steelHullAlbedo,
+    steel.steelHullNormal,
+    steel.steelHullRoughness,
+    funnel.buffFunnelAlbedo,
+    funnel.buffFunnelNormal,
+    funnel.buffFunnelRoughness,
+    funnel.cunardFunnelAlbedo,
+    costaFunnelAlbedo,
+    mahogany.mahoganyAlbedo,
+    mahogany.mahoganyRoughness,
+    marble.interiorMarbleAlbedo,
+    marble.interiorMarbleRoughness,
+    interiorPanelAlbedo,
+    ice.iceAlbedo,
+    ice.iceNormal,
+    ice.iceRoughness,
     hullNameplateBow,
     hullNameplateStern,
+    hullNameplateBritannicBow,
+    hullNameplateBritannicStern,
+    hullNameplateLusitaniaBow,
+    hullNameplateLusitaniaStern,
+    hullNameplateConcordiaBow,
+    hullNameplateConcordiaStern,
     hullNameplateCarpathia,
     whiteStarPennant,
+    hospitalRedCrossFlag,
+    cunardBurgee,
+    costaFlag,
+    italianEnsignFlag,
+    redCrossEmblem,
     redEnsignFlag,
-    whiteEnsignFlag,
-    interiorMarbleAlbedo,
+    compassDial,
+    telegraphDial,
+    telegraphDialCunard,
+    telegraphDialCosta,
+    clinometerDial,
+  ];
+
+  return {
+    ...teak,
+    ...steel,
+    ...funnel,
+    ...mahogany,
+    ...marble,
     interiorPanelAlbedo,
+    ...ice,
+    hullNameplateBow,
+    hullNameplateStern,
+    hullNameplateBritannicBow,
+    hullNameplateBritannicStern,
+    hullNameplateLusitaniaBow,
+    hullNameplateLusitaniaStern,
+    hullNameplateConcordiaBow,
+    hullNameplateConcordiaStern,
+    hullNameplateCarpathia,
+    whiteStarPennant,
+    hospitalRedCrossFlag,
+    cunardBurgee,
+    costaFlag,
+    italianEnsignFlag,
+    redCrossEmblem,
+    redEnsignFlag,
+    costaFunnelAlbedo,
+    compassDial,
+    telegraphDial,
+    telegraphDialCunard,
+    telegraphDialCosta,
+    clinometerDial,
     dispose: () => {
-      mahoganyAlbedo.dispose();
-      mahoganyRoughness.dispose();
-      teakDeckAlbedo.dispose();
-      teakDeckNormal.dispose();
-      steelHullAlbedo.dispose();
-      steelHullNormal.dispose();
-      compassDial.dispose();
-      telegraphDial.dispose();
-      clinometerDial.dispose();
-      iceAlbedo.dispose();
-      iceNormal.dispose();
-      sprayParticle.dispose();
-      hullNameplateBow.dispose();
-      hullNameplateStern.dispose();
-      hullNameplateCarpathia.dispose();
-      whiteStarPennant.dispose();
-      redEnsignFlag.dispose();
-      whiteEnsignFlag.dispose();
-      interiorMarbleAlbedo.dispose();
-      interiorPanelAlbedo.dispose();
+      for (const t of all) t.dispose();
     },
   };
 }
