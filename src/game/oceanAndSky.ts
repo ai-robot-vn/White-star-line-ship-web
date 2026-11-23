@@ -72,16 +72,34 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
   };
 
   // =========================================================================
-  // 1. FEATURE-FILM GERSTNER + SUBSURFACE SCATTERING + KELVIN WAKE OCEAN
+  // 1. FEATURE-FILM GERSTNER + TRANSLUCENT WATER + CAUSTICS + KELVIN WAKE
   // =========================================================================
   const oceanSegs = isSoftwareGl ? 76 : 168;
   const oceanGeo = new THREE.PlaneGeometry(2600, 2600, oceanSegs, oceanSegs);
   oceanGeo.rotateX(-Math.PI / 2);
 
+  // Radial near-field vertex density warp (~3.7m quads near ship & camera, seamless 2600m horizon)
+  const oceanPosAttr = oceanGeo.attributes.position as THREE.BufferAttribute;
+  const maxCornerR = Math.hypot(1300, 1300);
+  for (let i = 0; i < oceanPosAttr.count; i++) {
+    const vx = oceanPosAttr.getX(i);
+    const vz = oceanPosAttr.getZ(i);
+    const r = Math.hypot(vx, vz);
+    if (r > 0.001) {
+      const t = Math.min(1, r / maxCornerR);
+      const newR = r * (0.24 + 0.76 * Math.pow(t, 1.32));
+      const scale = newR / r;
+      oceanPosAttr.setX(i, vx * scale);
+      oceanPosAttr.setZ(i, vz * scale);
+    }
+  }
+  oceanPosAttr.needsUpdate = true;
+
   const oceanMat = new THREE.ShaderMaterial({
     uniforms: oceanUniforms,
     side: THREE.DoubleSide,
-    transparent: false,
+    transparent: true,
+    depthWrite: false,
     vertexShader: /* glsl */ `
       uniform float uTime;
       uniform vec2 uWorldOffset;
@@ -124,7 +142,7 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
         vec3 worldP = vec3(wx + disp.x, disp.y, wz + disp.z);
         vWorldPos = worldP;
         vGerstnerNormal = normalize(cross(binormal, tangent));
-        vWaveCrest = smoothstep(0.10, 0.42, disp.y);
+        vWaveCrest = smoothstep(-0.18, 0.42, disp.y);
 
         gl_Position = projectionMatrix * viewMatrix * vec4(worldP, 1.0);
       }
@@ -190,6 +208,27 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
         return w;
       }
 
+      float sampleHullHalfWidth(float zShip, float bowTipZ, float sternTipZ, float maxHalfBeam) {
+        float bowJoinZ = mix(bowTipZ, sternTipZ, 0.215);
+        float sternStartZ = mix(bowTipZ, sternTipZ, 0.78);
+        float ellipStartZ = sternTipZ - 10.0;
+        if (zShip < bowJoinZ) {
+          float tBow = clamp((zShip - bowTipZ) / max(1.0, bowJoinZ - bowTipZ), 0.0, 1.0);
+          return maxHalfBeam * pow(sin(tBow * 1.570796), 0.58);
+        }
+        if (zShip > ellipStartZ) {
+          float tAnchor = clamp((sternTipZ - ellipStartZ) / max(1.0, sternTipZ - sternStartZ), 0.0, 1.0);
+          float anchorBeam = maxHalfBeam * pow(sin(tAnchor * 1.570796), 0.50);
+          float u = clamp((zShip - ellipStartZ) / max(1.0, sternTipZ - ellipStartZ), 0.0, 1.0);
+          return anchorBeam * sqrt(max(0.0, 1.0 - u * u));
+        }
+        if (zShip > sternStartZ) {
+          float tStn = clamp((sternTipZ - zShip) / max(1.0, sternTipZ - sternStartZ), 0.0, 1.0);
+          return maxHalfBeam * pow(sin(tStn * 1.570796), 0.50);
+        }
+        return maxHalfBeam;
+      }
+
       void main() {
         // Keep interior dining saloon / engine room floor dry
         vec2 relShip = vWorldPos.xz - uShipPos;
@@ -200,16 +239,9 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
         float zShip = -shipFwd;
 
         float bowTipZ = uHullZRange.x - 4.0;
-        float sternTipZ = uHullZRange.y + 8.5;
-        if (uHullCutout > 0.5 && zShip > uHullZRange.x && zShip < uHullZRange.y) {
-          float hullHalfW = uHullHalfBeam;
-          if (zShip < -10.0) {
-            float tBow = clamp((zShip - bowTipZ) / max(1.0, -10.0 - bowTipZ), 0.0, 1.0);
-            hullHalfW = uHullHalfBeam * pow(sin(tBow * 1.570796), 0.78);
-          } else if (zShip > uHullZRange.y - 50.0) {
-            float tStn = clamp((sternTipZ - zShip) / max(1.0, sternTipZ - (uHullZRange.y - 50.0)), 0.0, 1.0);
-            hullHalfW = uHullHalfBeam * pow(sin(tStn * 1.570796), 0.65);
-          }
+        float sternTipZ = uHullZRange.y + 9.0;
+        if (uHullCutout > 0.5 && zShip > bowTipZ + 1.2 && zShip < sternTipZ - 2.0) {
+          float hullHalfW = sampleHullHalfWidth(zShip, bowTipZ, sternTipZ, uHullHalfBeam);
           if (abs(shipRight) < max(0.0, hullHalfW - 0.55)) discard;
         }
 
@@ -219,26 +251,34 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
         float viewDistAtten = 1.0 - smoothstep(90.0, 720.0, dist);
 
         // Multi-scale capillary wave normal perturbed on top of Gerstner wave normal
-        float eps = 0.28;
+        float eps = 0.26;
         float hC = microWaveHeight(vWorldPos.xz, uTime);
         float hX = microWaveHeight(vWorldPos.xz + vec2(eps, 0.0), uTime);
         float hZ = microWaveHeight(vWorldPos.xz + vec2(0.0, eps), uTime);
-        vec3 rippleN = normalize(vec3((hC - hX) * 1.15 * viewDistAtten, 1.0, (hC - hZ) * 1.15 * viewDistAtten));
-        vec3 N = normalize(vGerstnerNormal + vec3(rippleN.x, 0.0, rippleN.z) * 0.58);
+        vec3 rippleN = normalize(vec3((hC - hX) * 1.25 * viewDistAtten, 1.0, (hC - hZ) * 1.25 * viewDistAtten));
+        vec3 N = normalize(vGerstnerNormal + vec3(rippleN.x, 0.0, rippleN.z) * 0.62);
         if (uUnderwater > 0.5) N = -N;
 
         // Schlick Fresnel (water IOR ~ 1.333 -> F0 = 0.020)
         float NdotV = max(dot(N, V), 0.001);
         float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+        float lookDown = clamp(abs(V.y), 0.0, 1.0);
 
-        // Deep North Atlantic ocean body vs sunlit/moonlit subsurface wave crest glow
-        vec3 deepWater = mix(vec3(0.016, 0.072, 0.125), vec3(0.006, 0.024, 0.048), uNightMix);
-        vec3 shallowScatter = mix(vec3(0.035, 0.22, 0.28), vec3(0.014, 0.075, 0.115), uNightMix);
+        // Deep North Atlantic ocean body, sunlit/moonlit subsurface scatter & animated caustics
+        vec3 deepWater = mix(vec3(0.015, 0.095, 0.148), vec3(0.005, 0.028, 0.056), uNightMix);
+        vec3 shallowScatter = mix(vec3(0.032, 0.265, 0.325), vec3(0.014, 0.09, 0.14), uNightMix);
+
+        // Dual-layer refracted water caustics visible when looking down into the waves
+        vec2 cUv = vWorldPos.xz * 0.16 + N.xz * 1.25;
+        float cA = abs(noise2D(cUv + vec2(uTime * 0.24, -uTime * 0.19)) - 0.5);
+        float cB = abs(noise2D(cUv * 1.75 - vec2(uTime * 0.31, uTime * 0.22)) - 0.5);
+        float causticNet = smoothstep(0.14, 0.01, cA + cB * 0.72) * viewDistAtten * mix(0.42, 0.12, uNightMix);
+        vec3 causticGlow = mix(vec3(0.14, 0.48, 0.58), vec3(0.08, 0.22, 0.34), uNightMix) * causticNet * (0.45 + 0.55 * lookDown);
 
         vec3 L = normalize(uKeyDir);
         float sssView = pow(clamp(dot(V, -L + N * 0.55), 0.0, 1.0), 3.0);
         float sssStrength = (0.35 + 0.65 * vWaveCrest) * sssView * (1.0 - 0.55 * uNightMix);
-        vec3 bodyColor = mix(deepWater, shallowScatter, clamp(vWaveCrest * 0.48 + sssStrength * 0.82, 0.0, 1.0));
+        vec3 bodyColor = mix(deepWater, shallowScatter, clamp(vWaveCrest * 0.48 + sssStrength * 0.82, 0.0, 1.0)) + causticGlow;
 
         // Sky reflection matching dynamic sky dome gradient
         vec3 R = reflect(-V, N);
@@ -273,16 +313,9 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
             wakeFoam += (armLine + secLine) * bowFade * (0.55 + 0.65 * cellularFoam) * min(1.2, speedFactor);
           }
 
-          // Frothy hull-side waterline collar (matches reference bow/side spray silhouette)
+          // Frothy hull-side waterline collar matching fuller bow & elliptical counter stern
           float outerBeam = uHullHalfBeam + 0.65;
-          float hullEdgeW = outerBeam;
-          if (zShip < -10.0) {
-            float tB = clamp((zShip - bowTipZ) / max(1.0, -10.0 - bowTipZ), 0.0, 1.0);
-            hullEdgeW = outerBeam * pow(sin(tB * 1.570796), 0.78);
-          } else if (zShip > uHullZRange.y - 50.0) {
-            float tS = clamp((sternTipZ + 0.5 - zShip) / max(1.0, sternTipZ + 0.5 - (uHullZRange.y - 50.0)), 0.0, 1.0);
-            hullEdgeW = outerBeam * pow(sin(tS * 1.570796), 0.65);
-          }
+          float hullEdgeW = sampleHullHalfWidth(zShip, bowTipZ, sternTipZ + 0.5, outerBeam);
           if (zShip > bowTipZ - 2.0 && zShip < sternTipZ + 3.5) {
             float edgeDist = abs(abs(shipRight) - (hullEdgeW + 0.6));
             float collar = exp(-pow(edgeDist / 2.6, 2.0)) * (0.45 + 0.7 * foamNoiseB);
@@ -300,12 +333,17 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
         }
 
         // Natural Atlantic wind-driven crest whitecaps
-        float windWhitecap = smoothstep(0.62, 0.88, vWaveCrest * 0.75 + foamNoiseB * 0.45) * 0.28;
+        float windWhitecap = smoothstep(0.66, 0.90, vWaveCrest * 0.75 + foamNoiseB * 0.45) * 0.26;
         float totalFoam = clamp(wakeFoam + windWhitecap, 0.0, 0.96);
 
         vec3 oceanColor = mix(bodyColor, skyRefl, fresnel * 0.78) + glint;
         vec3 foamTint = mix(vec3(0.92, 0.96, 1.0), vec3(0.46, 0.58, 0.72), uNightMix * 0.75);
         oceanColor = mix(oceanColor, foamTint, totalFoam);
+
+        // Angle-dependent water translucency: downward views look into the sea revealing submerged hulls, props & torpedoes
+        float baseAlpha = mix(0.86, 0.48, smoothstep(0.14, 0.78, lookDown));
+        baseAlpha = mix(baseAlpha, 0.96, fresnel * 0.65);
+        float waterAlpha = clamp(max(baseAlpha, totalFoam * 0.96), 0.46, 1.0);
 
         // Underwater Snell's window & caustics when camera plunges beneath surface
         if (uUnderwater > 0.01) {
@@ -315,13 +353,15 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
           vec3 snellColor = mix(uSkyHorizon * 0.55, vec3(0.18, 0.54, 0.68), 0.35);
           vec3 underCol = mix(vec3(0.02, 0.14, 0.22), snellColor, snell * 0.75) + vec3(0.14, 0.36, 0.45) * caustic * 0.4;
           oceanColor = mix(oceanColor, underCol, uUnderwater);
+          waterAlpha = mix(waterAlpha, mix(0.84, 0.26, snell), uUnderwater);
         }
 
         // Exponential distance fog matching Three.js FogExp2
         float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
         vec3 finalCol = mix(oceanColor, uFogColor, clamp(fogFactor, 0.0, 1.0));
+        waterAlpha = mix(waterAlpha, 1.0, clamp(fogFactor * 1.15, 0.0, 1.0));
 
-        gl_FragColor = vec4(finalCol, 1.0);
+        gl_FragColor = vec4(finalCol, waterAlpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -331,7 +371,7 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
   const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
   oceanMesh.name = 'atlantic_ocean';
   oceanMesh.frustumCulled = false;
-  oceanMesh.renderOrder = 0;
+  oceanMesh.renderOrder = 1;
   scene.add(oceanMesh);
 
   // =========================================================================
@@ -421,9 +461,14 @@ export function createOceanAndSky(scene: THREE.Scene, isSoftwareGl: boolean): Oc
           skyCol = mix(skyCol, cloudCol, cloudMask * mix(0.62, 0.34, uNightMix));
         }
 
-        // Below-horizon nadir color
+        // Deep North Atlantic oceanic teal-to-abyss nadir below horizon for translucent water views
         if (d.y < 0.0) {
-          skyCol = mix(uHorizonColor, vec3(0.02, 0.05, 0.09), smoothstep(0.0, -0.35, d.y));
+          vec3 oceanMid = mix(vec3(0.022, 0.155, 0.225), vec3(0.007, 0.036, 0.068), uNightMix);
+          vec3 oceanAbyss = mix(vec3(0.006, 0.048, 0.088), vec3(0.002, 0.010, 0.024), uNightMix);
+          float depthT = smoothstep(0.0, -0.55, d.y);
+          float rayBand = fbm4(d.xz * 4.5 + vec2(uTime * 0.04, -uTime * 0.03)) * (1.0 - depthT) * (1.0 - uNightMix * 0.65);
+          vec3 nadirCol = mix(oceanMid, oceanAbyss, depthT) + vec3(0.04, 0.16, 0.22) * rayBand * 0.45;
+          skyCol = mix(uHorizonColor * 0.78, nadirCol, smoothstep(0.0, -0.09, d.y));
         }
 
         gl_FragColor = vec4(skyCol, 1.0);

@@ -1,5 +1,15 @@
+import { RadioStationId } from './types';
+
 const BGM_TRACK_URL =
   '/assets/aistudio/DAISHI_DANCE__Cecile_Corbel_-_Take_Me_Hand__Lyrics__bab4a031.mp3';
+
+const RADIO_STATION_ORDER: RadioStationId[] = ['oceanfm', 'leonida', 'lounge', 'off'];
+const RADIO_STATION_NAMES: Record<RadioStationId, string> = {
+  oceanfm: 'OceanFM · Take Me Hand',
+  leonida: 'Leonida Vice Nights',
+  lounge: 'Atlantic Jazz Lounge',
+  off: 'Radio Off',
+};
 
 export class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -9,9 +19,14 @@ export class SoundEngine {
   private engineGain: GainNode | null = null;
   private oceanNoiseGain: GainNode | null = null;
   private oceanFilter: BiquadFilterNode | null = null;
+  private speedboatOsc: OscillatorNode | null = null;
+  private speedboatGain: GainNode | null = null;
   private bgmAudio: HTMLAudioElement | null = null;
   private bgmUserMuted = false;
   private bgmDucked = false;
+  private radioStation: RadioStationId = 'oceanfm';
+  private radioIntervalId: number | null = null;
+  private radioStep = 0;
   private readonly bgmNormalVolume = 0.42;
   private readonly bgmDuckVolume = 0.18;
   private muted = false;
@@ -22,7 +37,30 @@ export class SoundEngine {
   }
 
   public isMusicMuted(): boolean {
-    return this.bgmUserMuted || this.muted;
+    return this.bgmUserMuted || this.muted || this.radioStation === 'off';
+  }
+
+  public getRadioStation(): RadioStationId {
+    return this.radioStation;
+  }
+
+  public getRadioStationName(): string {
+    return RADIO_STATION_NAMES[this.radioStation];
+  }
+
+  public setRadioStation(station: RadioStationId): void {
+    this.radioStation = station;
+    if (station !== 'off' && this.bgmUserMuted) {
+      this.bgmUserMuted = false;
+    }
+    this.syncRadioPlayback();
+  }
+
+  public cycleRadioStation(): RadioStationId {
+    const idx = RADIO_STATION_ORDER.indexOf(this.radioStation);
+    const next = RADIO_STATION_ORDER[(idx + 1) % RADIO_STATION_ORDER.length];
+    this.setRadioStation(next);
+    return next;
   }
 
   private ensureBgmElement(): HTMLAudioElement | null {
@@ -32,18 +70,112 @@ export class SoundEngine {
       audio.loop = true;
       audio.preload = 'auto';
       audio.volume = this.bgmDucked ? this.bgmDuckVolume : this.bgmNormalVolume;
-      audio.muted = this.muted || this.bgmUserMuted;
+      audio.muted = this.muted || this.bgmUserMuted || this.radioStation !== 'oceanfm';
       this.bgmAudio = audio;
     }
     return this.bgmAudio;
+  }
+
+  private syncRadioPlayback(): void {
+    const wantMp3 = !this.muted && !this.bgmUserMuted && this.radioStation === 'oceanfm';
+    if (this.bgmAudio) {
+      this.bgmAudio.muted = !wantMp3;
+      this.bgmAudio.volume = this.bgmDucked ? this.bgmDuckVolume : this.bgmNormalVolume;
+      if (wantMp3 && this.bgmAudio.paused) {
+        void this.bgmAudio.play().catch(() => {});
+      } else if (!wantMp3 && !this.bgmAudio.paused) {
+        this.bgmAudio.pause();
+      }
+    } else if (wantMp3) {
+      this.startBackgroundMusic();
+    }
+
+    const wantProc =
+      !this.muted &&
+      !this.bgmUserMuted &&
+      (this.radioStation === 'leonida' || this.radioStation === 'lounge');
+    if (wantProc && this.radioIntervalId === null) {
+      this.radioIntervalId = window.setInterval(() => this.tickProceduralRadio(), 260);
+    } else if (!wantProc && this.radioIntervalId !== null) {
+      window.clearInterval(this.radioIntervalId);
+      this.radioIntervalId = null;
+    }
+  }
+
+  private tickProceduralRadio(): void {
+    if (!this.ctx || !this.masterGain || this.muted || this.bgmUserMuted) return;
+    if (this.radioStation !== 'leonida' && this.radioStation !== 'lounge') return;
+    const now = this.ctx.currentTime;
+    const step = this.radioStep++;
+    const duckMult = this.bgmDucked ? 0.4 : 1.0;
+
+    if (this.radioStation === 'leonida') {
+      // 80s Vice Synthwave driving bass + shimmering lead arp
+      const bassScale = [55, 55, 65.41, 65.41, 73.42, 73.42, 61.74, 65.41];
+      const arpScale = [220, 261.63, 329.63, 392, 440, 392, 329.63, 293.66];
+      const fBass = bassScale[step % bassScale.length];
+      const fArp = arpScale[step % arpScale.length];
+
+      const bass = this.ctx.createOscillator();
+      const bFilt = this.ctx.createBiquadFilter();
+      const bGain = this.ctx.createGain();
+      bass.type = 'sawtooth';
+      bass.frequency.setValueAtTime(fBass, now);
+      bFilt.type = 'lowpass';
+      bFilt.frequency.setValueAtTime(340, now);
+      bGain.gain.setValueAtTime(0.085 * duckMult, now);
+      bGain.gain.exponentialRampToValueAtTime(0.002, now + 0.22);
+      bass.connect(bFilt);
+      bFilt.connect(bGain);
+      bGain.connect(this.masterGain);
+      bass.start(now);
+      bass.stop(now + 0.24);
+
+      if (step % 2 === 0) {
+        const arp = this.ctx.createOscillator();
+        const aGain = this.ctx.createGain();
+        arp.type = 'triangle';
+        arp.frequency.setValueAtTime(fArp, now);
+        aGain.gain.setValueAtTime(0.05 * duckMult, now);
+        aGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        arp.connect(aGain);
+        aGain.connect(this.masterGain);
+        arp.start(now);
+        arp.stop(now + 0.3);
+      }
+    } else {
+      // Atlantic Jazz Lounge — warm Rhodes chord hits every 4 beats
+      if (step % 4 === 0) {
+        const chords = [
+          [261.63, 329.63, 392.0, 493.88],
+          [220.0, 261.63, 329.63, 392.0],
+          [174.61, 220.0, 261.63, 329.63],
+          [196.0, 246.94, 293.66, 349.23],
+        ];
+        const chord = chords[Math.floor(step / 4) % chords.length];
+        for (const freq of chord) {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.028 * duckMult, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.92);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.95);
+        }
+      }
+    }
   }
 
   public startBackgroundMusic(): void {
     const audio = this.ensureBgmElement();
     if (!audio) return;
     audio.volume = this.bgmDucked ? this.bgmDuckVolume : this.bgmNormalVolume;
-    audio.muted = this.muted || this.bgmUserMuted;
-    if (audio.paused && !audio.muted) {
+    const wantMp3 = !this.muted && !this.bgmUserMuted && this.radioStation === 'oceanfm';
+    audio.muted = !wantMp3;
+    if (audio.paused && wantMp3) {
       void audio.play().catch(() => {
         // Browser autoplay blocked until user gesture; retried in unlock()
       });
@@ -63,14 +195,7 @@ export class SoundEngine {
     if (!this.bgmUserMuted && this.muted) {
       this.setMuted(false);
     }
-    if (this.bgmAudio) {
-      this.bgmAudio.muted = this.muted || this.bgmUserMuted;
-      if (!this.bgmAudio.muted && this.bgmAudio.paused) {
-        void this.bgmAudio.play().catch(() => {});
-      }
-    } else if (!this.bgmUserMuted && !this.muted) {
-      this.startBackgroundMusic();
-    }
+    this.syncRadioPlayback();
     return this.isMusicMuted();
   }
 
@@ -79,12 +204,7 @@ export class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.7, this.ctx.currentTime, 0.05);
     }
-    if (this.bgmAudio) {
-      this.bgmAudio.muted = muted || this.bgmUserMuted;
-      if (!this.bgmAudio.muted && this.bgmAudio.paused) {
-        void this.bgmAudio.play().catch(() => {});
-      }
-    }
+    this.syncRadioPlayback();
   }
 
   public toggleMute(): boolean {
@@ -160,7 +280,22 @@ export class SoundEngine {
     this.oceanNoiseGain.connect(this.masterGain);
     noiseSource.start();
 
+    // Speedboat dual V8 outboard roar (silent until boarded)
+    this.speedboatGain = this.ctx.createGain();
+    this.speedboatGain.gain.value = 0;
+    const sbFilter = this.ctx.createBiquadFilter();
+    sbFilter.type = 'lowpass';
+    sbFilter.frequency.value = 380;
+    this.speedboatOsc = this.ctx.createOscillator();
+    this.speedboatOsc.type = 'sawtooth';
+    this.speedboatOsc.frequency.value = 72;
+    this.speedboatOsc.connect(sbFilter);
+    sbFilter.connect(this.speedboatGain);
+    this.speedboatGain.connect(this.masterGain);
+    this.speedboatOsc.start();
+
     this.initialized = true;
+    this.syncRadioPlayback();
   }
 
   public updateShipAmbience(speedKnots: number, active: boolean): void {
@@ -723,8 +858,92 @@ export class SoundEngine {
     noise.start(now);
   }
 
+  public playWantedChime(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const now = this.ctx.currentTime;
+    [440, 554.37, 659.25].forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.09);
+      gain.gain.setValueAtTime(0.11, now + i * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.34);
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(now + i * 0.09);
+      osc.stop(now + i * 0.09 + 0.36);
+    });
+  }
+
+  public playPoliceSirenPulse(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(620, now);
+    osc.frequency.linearRampToValueAtTime(920, now + 0.36);
+    osc.frequency.linearRampToValueAtTime(600, now + 0.72);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.76);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.78);
+  }
+
+  public playMissionPassed(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.1);
+      gain.gain.setValueAtTime(0.12, now + i * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.55);
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(now + i * 0.1);
+      osc.stop(now + i * 0.1 + 0.58);
+    });
+  }
+
+  public playFocusActivate(active: boolean): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(active ? 520 : 240, now);
+    osc.frequency.exponentialRampToValueAtTime(active ? 160 : 460, now + 0.28);
+    gain.gain.setValueAtTime(0.11, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.32);
+  }
+
+  public playSpeedboatEngine(knots: number, nitro: boolean, active: boolean): void {
+    if (!this.initialized || !this.ctx || !this.speedboatGain || !this.speedboatOsc) return;
+    const t = this.ctx.currentTime;
+    if (!active) {
+      this.speedboatGain.gain.setTargetAtTime(0, t, 0.1);
+      return;
+    }
+    const norm = Math.min(1, Math.abs(knots) / 84);
+    this.speedboatGain.gain.setTargetAtTime(0.025 + norm * (nitro ? 0.1 : 0.065), t, 0.08);
+    this.speedboatOsc.frequency.setTargetAtTime(62 + norm * (nitro ? 115 : 82), t, 0.08);
+  }
+
   public dispose(): void {
     try {
+      if (this.radioIntervalId !== null) {
+        window.clearInterval(this.radioIntervalId);
+        this.radioIntervalId = null;
+      }
       if (this.bgmAudio) {
         this.bgmAudio.pause();
         this.bgmAudio.removeAttribute('src');
@@ -733,6 +952,7 @@ export class SoundEngine {
       }
       this.engineOsc1?.stop();
       this.engineOsc2?.stop();
+      this.speedboatOsc?.stop();
       void this.ctx?.close();
     } catch {
       // ignore close errors

@@ -94,7 +94,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           </svg>
 
           <p className="text-xs md:text-sm text-slate-200/90 max-w-xl mx-auto mb-5 leading-relaxed">
-            Choose your ocean liner moored side by side in Southampton Port. Clear the harbor breakwaters into an evenly spaced North Atlantic ice field as daylight transitions into starry Arctic darkness over one minute.
+            Command three historic ocean liners moored side by side in Southampton Port as daylight turns to night in one minute. Thread North Atlantic icebergs aboard Titanic, battle U-boats on Britannic, or navigate granite reefs on Costa Concordia—plus launch the Scarab 38 speedboat (B), outrun 1–5★ Coast Guard pursuits, run contracts (G), engage Captain&apos;s Focus (U), and tune ship radio (R).
           </p>
 
           {/* 3-Ship Fleet Selector */}
@@ -105,9 +105,9 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               const accentClass =
                 id === 'britannic'
                   ? 'text-emerald-300'
-                  : id === 'lusitania'
-                    ? 'text-rose-300'
-                    : 'text-amber-200';
+                  : id === 'concordia'
+                    ? 'text-amber-300'
+                    : 'text-sky-200';
               return (
                 <button
                   key={id}
@@ -149,7 +149,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               onClick={onStartNight}
               className="apple-glass-subtle hover:bg-white/15 inline-flex items-center justify-center px-5 py-3.5 text-slate-100 font-semibold tracking-[0.1em] uppercase text-xs rounded-2xl transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
-              April 14 Night Watch
+              Night Watch Challenge
             </button>
           </div>
         </div>
@@ -157,8 +157,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 
       {/* Control Hint Bar */}
       <div className="flex justify-center">
-        <div className="apple-glass-panel px-5 py-2 rounded-2xl text-xs tracking-[0.08em] text-slate-200/90 text-center">
-          ← / → Steer &nbsp;·&nbsp; Z / X Speed &nbsp;·&nbsp; T Autopilot &nbsp;·&nbsp; Space Searchlight &nbsp;·&nbsp; V Views &amp; Decks &nbsp;·&nbsp; W/A/S/D Walk
+        <div className="apple-glass-panel px-5 py-2 rounded-2xl text-xs tracking-[0.06em] text-slate-200/90 text-center">
+          ← / → Steer &nbsp;·&nbsp; Z / X Speed &nbsp;·&nbsp; B Speedboat &nbsp;·&nbsp; U Focus &nbsp;·&nbsp; G Contract &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; T Autopilot &nbsp;·&nbsp; V Views &amp; Walk
         </div>
       </div>
     </div>

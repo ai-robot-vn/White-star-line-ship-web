@@ -49,37 +49,72 @@ export const EndModal: React.FC<EndModalProps> = ({
           {isPaused
             ? 'Orders are standing by in the wheelhouse.'
             : isVictory
-              ? `You guided ${telemetry.vesselName} swiftly through thousands of Atlantic icebergs with her reinforced hull intact.`
-              : telemetry.carpathiaStage === 'complete'
-                ? `${telemetry.vesselShortName} broke amidships and sank beneath the Atlantic, while RMS Carpathia steamed through the ice field and rescued all 712 survivors from the 16 lifeboats.`
-                : telemetry.carpathiaStage === 'boarding'
-                  ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far).`
-                  : telemetry.carpathiaStage === 'approaching'
-                    ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is threading carefully through the icebergs toward the 16 waiting lifeboats (${telemetry.carpathiaDistanceM} m away).`
-                    : `${telemetry.vesselShortName} broke amidships and slipped beneath the freezing Atlantic while 16 lifeboats pulled away to await RMS Carpathia.`}
+              ? telemetry.threatMode === 'submarines'
+                ? `You guided ${telemetry.vesselName} safely through hostile Atlantic U-boat waters while her gun crew sank ${telemetry.submarinesSunk} enemy ${telemetry.submarinesSunk === 1 ? 'submarine' : 'submarines'}.`
+                : telemetry.threatMode === 'reefs'
+                  ? `You navigated ${telemetry.vesselName} cleanly past the granite coastal reefs and Coast Guard patrols with her twin-azipod hull intact.`
+                  : `You guided ${telemetry.vesselName} swiftly through thousands of Atlantic icebergs with her reinforced hull intact.`
+              : telemetry.vesselId === 'britannic'
+                ? telemetry.carpathiaStage === 'complete'
+                  ? `HMHS Britannic rolled over onto her starboard beam and sank intact beneath the waves after a U-boat torpedo strike, while RMS Carpathia rescued all 712 survivors from the 16 lifeboats.`
+                  : telemetry.carpathiaStage === 'boarding'
+                    ? `HMHS Britannic capsized intact to starboard. RMS Carpathia is alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far).`
+                    : telemetry.carpathiaStage === 'approaching'
+                      ? `HMHS Britannic capsized intact to starboard. RMS Carpathia is steaming carefully through open Atlantic waters toward the 16 waiting lifeboats (${telemetry.carpathiaDistanceM} m away).`
+                      : `HMHS Britannic suffered a lethal U-boat torpedo breach, capsized to starboard, and sank intact while 16 lifeboats pulled away to await RMS Carpathia.`
+                : telemetry.vesselId === 'concordia'
+                  ? telemetry.carpathiaStage === 'complete'
+                    ? `Costa Concordia tore her hull on the granite reef shelf and capsized 68° onto her starboard beam, resting half-submerged while RMS Carpathia rescued all 712 survivors from the 16 lifeboats.`
+                    : telemetry.carpathiaStage === 'boarding'
+                      ? `Costa Concordia capsized 68° onto her starboard beam on the granite reef shelf. RMS Carpathia is alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far).`
+                      : telemetry.carpathiaStage === 'approaching'
+                        ? `Costa Concordia capsized 68° onto her starboard beam on the granite reef. RMS Carpathia is steaming through coastal waters toward the 16 waiting lifeboats (${telemetry.carpathiaDistanceM} m away).`
+                        : `Costa Concordia struck a submerged granite reef, heeled sharply, and capsized 68° onto her starboard beam while 16 lifeboats pulled away to await RMS Carpathia.`
+                  : telemetry.carpathiaStage === 'complete'
+                    ? `${telemetry.vesselShortName} broke amidships and sank beneath the Atlantic, while RMS Carpathia steamed through the ice field and rescued all 712 survivors from the 16 lifeboats.`
+                    : telemetry.carpathiaStage === 'boarding'
+                      ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is alongside with boarding ladders lowered (${telemetry.survivorsRescued} / 712 survivors aboard so far).`
+                      : telemetry.carpathiaStage === 'approaching'
+                        ? `${telemetry.vesselShortName} sank beneath the Atlantic. RMS Carpathia is threading carefully through the icebergs toward the 16 waiting lifeboats (${telemetry.carpathiaDistanceM} m away).`
+                        : `${telemetry.vesselShortName} broke amidships and slipped beneath the freezing Atlantic while 16 lifeboats pulled away to await RMS Carpathia.`}
         </p>
 
         {/* Voyage Summary Readout */}
-        <div className="grid grid-cols-3 gap-2 mb-6 apple-glass-subtle p-3.5 rounded-2xl">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6 apple-glass-subtle p-3.5 rounded-2xl">
           <div>
             <div className="text-[10px] tracking-[0.12em] uppercase text-slate-300/75">Distance</div>
-            <div className="text-base font-bold text-white tabular-nums">
+            <div className="text-sm font-bold text-white tabular-nums">
               {telemetry.distanceNm.toFixed(1)} NM
             </div>
           </div>
           <div>
             <div className="text-[10px] tracking-[0.12em] uppercase text-slate-300/75">
-              {phase === 'gameover' ? 'Rescued' : 'Near Misses'}
-            </div>
-            <div className="text-base font-bold text-amber-200 tabular-nums">
               {phase === 'gameover'
-                ? `${telemetry.survivorsRescued} / 712`
-                : telemetry.nearMissCount}
+                ? 'Rescued'
+                : telemetry.threatMode === 'submarines'
+                  ? 'U-Boats Sunk'
+                  : 'Near Misses'}
+            </div>
+            <div className="text-sm font-bold text-amber-200 tabular-nums">
+              {phase === 'gameover'
+                ? `${telemetry.survivorsRescued}/712`
+                : telemetry.threatMode === 'submarines'
+                  ? telemetry.submarinesSunk
+                  : telemetry.nearMissCount}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] tracking-[0.12em] uppercase text-slate-300/75">Cash / RP</div>
+            <div className="text-sm font-bold text-emerald-300 tabular-nums">
+              ${telemetry.cash.toLocaleString()}
+            </div>
+            <div className="text-[10px] font-semibold text-sky-300 tabular-nums">
+              {telemetry.rep.toLocaleString()} RP
             </div>
           </div>
           <div>
             <div className="text-[10px] tracking-[0.12em] uppercase text-slate-300/75">Score</div>
-            <div className="text-base font-bold text-white tabular-nums">
+            <div className="text-sm font-bold text-white tabular-nums">
               {telemetry.score.toLocaleString()}
             </div>
           </div>

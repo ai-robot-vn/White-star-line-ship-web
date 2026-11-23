@@ -51,6 +51,9 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {
   searchlightCooldownPct: 0,
   icebergWarning: null,
   icebergsInField: 0,
+  threatMode: 'icebergs',
+  submarinesSunk: 0,
+  activeTorpedoes: 0,
   lastEventText: null,
   autopilotEnabled: false,
   bowPanicActive: false,
@@ -59,6 +62,27 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {
   isMusicMuted: false,
   voyageTimeSec: 0,
   skyPhaseLabel: 'DAYLIGHT',
+  playerOverboard: false,
+  wantedLevel: 0,
+  wantedEvading: false,
+  wantedCooldownPct: 0,
+  cash: 1500,
+  rep: 0,
+  specialFocusPct: 100,
+  specialFocusActive: false,
+  activeCraft: 'ship',
+  speedboatKnots: 0,
+  speedboatNitroPct: 100,
+  radioStation: 'oceanfm',
+  radioStationName: 'OceanFM',
+  activeMissionTitle: null,
+  activeMissionStep: null,
+  activeMissionTimerSec: null,
+  missionBannerText: null,
+  missionBannerSub: null,
+  stuntText: null,
+  radarHeadingRad: 0,
+  radarBlips: [],
 };
 
 export default function App() {
@@ -140,6 +164,11 @@ export default function App() {
           onFocusAftermath={(target) => engineRef.current?.focusAftermathTarget(target)}
           onOpenReport={() => engineRef.current?.openVoyageReport()}
           onRestart={() => engineRef.current?.startGame()}
+          onReturnToShip={() => engineRef.current?.returnPlayerToShip()}
+          onToggleSpeedboat={() => engineRef.current?.toggleSpeedboat()}
+          onToggleFocus={() => engineRef.current?.toggleSpecialFocus()}
+          onCycleMission={() => engineRef.current?.startOrCycleMission()}
+          onCycleRadio={() => engineRef.current?.cycleRadioStation()}
         />
       )}
 

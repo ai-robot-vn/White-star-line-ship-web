@@ -22,18 +22,22 @@ export interface ProceduralTextureSet {
   hullNameplateStern: THREE.CanvasTexture;
   hullNameplateBritannicBow: THREE.CanvasTexture;
   hullNameplateBritannicStern: THREE.CanvasTexture;
-  hullNameplateLusitaniaBow: THREE.CanvasTexture;
-  hullNameplateLusitaniaStern: THREE.CanvasTexture;
+  hullNameplateConcordiaBow: THREE.CanvasTexture;
+  hullNameplateConcordiaStern: THREE.CanvasTexture;
   hullNameplateCarpathia: THREE.CanvasTexture;
   whiteStarPennant: THREE.CanvasTexture;
   hospitalRedCrossFlag: THREE.CanvasTexture;
   cunardBurgee: THREE.CanvasTexture;
+  costaFlag: THREE.CanvasTexture;
+  italianEnsignFlag: THREE.CanvasTexture;
   redCrossEmblem: THREE.CanvasTexture;
   redEnsignFlag: THREE.CanvasTexture;
   cunardFunnelAlbedo: THREE.CanvasTexture;
+  costaFunnelAlbedo: THREE.CanvasTexture;
   compassDial: THREE.CanvasTexture;
   telegraphDial: THREE.CanvasTexture;
   telegraphDialCunard: THREE.CanvasTexture;
+  telegraphDialCosta: THREE.CanvasTexture;
   clinometerDial: THREE.CanvasTexture;
   dispose: () => void;
 }
@@ -802,6 +806,105 @@ function createRedEnsignTexture(aniso: number): THREE.CanvasTexture {
   return tex;
 }
 
+function createCostaFunnelTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#f2c016';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle vertical panel seam lines
+  ctx.strokeStyle = 'rgba(130, 96, 8, 0.22)';
+  ctx.lineWidth = 2;
+  for (let x = 0; x < 512; x += 64) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 512);
+    ctx.stroke();
+  }
+
+  // Deep navy Costa Crociere top band & "C" logo emblems on port and starboard flanks
+  ctx.fillStyle = '#073573';
+  ctx.fillRect(0, 0, 512, 92);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 92, 512, 12);
+
+  for (const cx of [128, 384]) {
+    const cy = 285;
+    ctx.fillStyle = '#073573';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 86, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f2c016';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 66, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#073573';
+    ctx.beginPath();
+    ctx.arc(cx + 6, cy, 46, 0.45, Math.PI * 2 - 0.45);
+    ctx.lineTo(cx + 6, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#f2c016';
+    ctx.beginPath();
+    ctx.arc(cx + 12, cy, 24, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createCostaFlagTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#f2c016';
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.fillStyle = '#073573';
+  ctx.fillRect(0, 0, 512, 42);
+  ctx.fillRect(0, 214, 512, 42);
+  ctx.beginPath();
+  ctx.arc(256, 128, 62, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f2c016';
+  ctx.beginPath();
+  ctx.arc(262, 128, 42, 0.48, Math.PI * 2 - 0.48);
+  ctx.lineTo(262, 128);
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
+function createItalianEnsignTexture(aniso: number): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512, 256);
+  ctx.fillStyle = '#009246';
+  ctx.fillRect(0, 0, 171, 256);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(171, 0, 170, 256);
+  ctx.fillStyle = '#ce2b37';
+  ctx.fillRect(341, 0, 171, 256);
+
+  // Maritime Republic shield accent in center white stripe
+  ctx.fillStyle = '#0b3b82';
+  ctx.fillRect(228, 92, 56, 72);
+  ctx.strokeStyle = '#d4af37';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(228, 92, 56, 72);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  return tex;
+}
+
 function createCompassDialTexture(aniso: number): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = makeCanvas(size, size);
@@ -979,17 +1082,21 @@ export function createProceduralTextures(maxAnisotropy = 8): ProceduralTextureSe
   const hullNameplateStern = createNameplateTexture('TITANIC', 'LIVERPOOL', aniso);
   const hullNameplateBritannicBow = createNameplateTexture('BRITANNIC', undefined, aniso);
   const hullNameplateBritannicStern = createNameplateTexture('BRITANNIC', 'LIVERPOOL', aniso);
-  const hullNameplateLusitaniaBow = createNameplateTexture('LUSITANIA', undefined, aniso);
-  const hullNameplateLusitaniaStern = createNameplateTexture('LUSITANIA', 'LIVERPOOL', aniso);
+  const hullNameplateConcordiaBow = createNameplateTexture('COSTA CONCORDIA', undefined, aniso);
+  const hullNameplateConcordiaStern = createNameplateTexture('COSTA CONCORDIA', 'GENOVA', aniso);
   const hullNameplateCarpathia = createNameplateTexture('CARPATHIA', undefined, aniso);
   const whiteStarPennant = createWhiteStarPennantTexture(aniso);
   const hospitalRedCrossFlag = createHospitalRedCrossFlagTexture(aniso);
   const cunardBurgee = createCunardBurgeeTexture(aniso);
+  const costaFlag = createCostaFlagTexture(aniso);
+  const italianEnsignFlag = createItalianEnsignTexture(aniso);
   const redCrossEmblem = createRedCrossEmblemTexture(aniso);
   const redEnsignFlag = createRedEnsignTexture(aniso);
+  const costaFunnelAlbedo = createCostaFunnelTexture(aniso);
   const compassDial = createCompassDialTexture(aniso);
   const telegraphDial = createTelegraphDialTexture(aniso, 'WHITE STAR');
   const telegraphDialCunard = createTelegraphDialTexture(aniso, 'CUNARD LINE');
+  const telegraphDialCosta = createTelegraphDialTexture(aniso, 'COSTA CROCIERE');
   const clinometerDial = createClinometerDialTexture(aniso);
 
   const all: THREE.Texture[] = [
@@ -1003,6 +1110,7 @@ export function createProceduralTextures(maxAnisotropy = 8): ProceduralTextureSe
     funnel.buffFunnelNormal,
     funnel.buffFunnelRoughness,
     funnel.cunardFunnelAlbedo,
+    costaFunnelAlbedo,
     mahogany.mahoganyAlbedo,
     mahogany.mahoganyRoughness,
     marble.interiorMarbleAlbedo,
@@ -1015,17 +1123,20 @@ export function createProceduralTextures(maxAnisotropy = 8): ProceduralTextureSe
     hullNameplateStern,
     hullNameplateBritannicBow,
     hullNameplateBritannicStern,
-    hullNameplateLusitaniaBow,
-    hullNameplateLusitaniaStern,
+    hullNameplateConcordiaBow,
+    hullNameplateConcordiaStern,
     hullNameplateCarpathia,
     whiteStarPennant,
     hospitalRedCrossFlag,
     cunardBurgee,
+    costaFlag,
+    italianEnsignFlag,
     redCrossEmblem,
     redEnsignFlag,
     compassDial,
     telegraphDial,
     telegraphDialCunard,
+    telegraphDialCosta,
     clinometerDial,
   ];
 
@@ -1041,17 +1152,21 @@ export function createProceduralTextures(maxAnisotropy = 8): ProceduralTextureSe
     hullNameplateStern,
     hullNameplateBritannicBow,
     hullNameplateBritannicStern,
-    hullNameplateLusitaniaBow,
-    hullNameplateLusitaniaStern,
+    hullNameplateConcordiaBow,
+    hullNameplateConcordiaStern,
     hullNameplateCarpathia,
     whiteStarPennant,
     hospitalRedCrossFlag,
     cunardBurgee,
+    costaFlag,
+    italianEnsignFlag,
     redCrossEmblem,
     redEnsignFlag,
+    costaFunnelAlbedo,
     compassDial,
     telegraphDial,
     telegraphDialCunard,
+    telegraphDialCosta,
     clinometerDial,
     dispose: () => {
       for (const t of all) t.dispose();

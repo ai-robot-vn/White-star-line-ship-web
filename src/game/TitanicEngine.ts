@@ -10,6 +10,7 @@ import {
   CruiseAwarenessContext,
   FloatingLifeboatHazard,
 } from './charactersBuilder';
+import { GtaSandboxSystem } from './gtaSandbox';
 import { buildSouthamptonHarbor, HarborRig } from './harborBuilder';
 import { IcebergEntity, IcebergFactory } from './icebergBuilder';
 import {
@@ -20,6 +21,7 @@ import {
 } from './oceanAndSky';
 import { buildOceanLinerShip } from './shipVariants';
 import { BREAK_Z, TitanicShipRig } from './shipBuilder';
+import { SubmarineCombatSystem } from './submarineCombat';
 import { createProceduralTextures, ProceduralTextureSet } from './textures';
 import {
   colorFromHex,
@@ -36,6 +38,7 @@ import {
   getEffectiveTelegraphKnots,
   getVesselSpotSpec,
   IcebergVariant,
+  RadioStationId,
   TARGET_VOYAGE_NM,
   TELEGRAPH_NOTCHES,
   TelemetrySnapshot,
@@ -116,6 +119,8 @@ export class TitanicEngine {
   private readonly oceanAndSky: OceanAndSkyRig;
   private readonly iceFactory: IcebergFactory;
   private readonly particles: ParticlePool;
+  private readonly submarineCombat: SubmarineCombatSystem;
+  private readonly gtaSandbox: GtaSandboxSystem;
   public readonly sound: SoundEngine;
 
   private readonly hemiLight: THREE.HemisphereLight;
@@ -164,6 +169,8 @@ export class TitanicEngine {
   private score = 0;
   private bestScore = 0;
   private nearMissCount = 0;
+  private submarinesSunk = 0;
+  private activeTorpedoes = 0;
   private combo = 1;
 
   // Searchlight sweep & ability
@@ -199,9 +206,18 @@ export class TitanicEngine {
   private lastPointerY = 0;
   private pointerDragDist = 0;
 
-  // On-foot walking cadence
+  // On-foot walking cadence, jump & overboard sea physics
   private walkBobPhase = 0;
   private isWalkingOnFoot = false;
+  private playerJumpOffsetY = 0;
+  private playerJumpVelY = 0;
+  private playerIsGrounded = true;
+  private playerHasWalked = false;
+  private playerLeftDeck = false;
+  private playerOverboard = false;
+  private readonly overboardPos = new THREE.Vector3();
+  private readonly overboardVel = new THREE.Vector3();
+  private readonly playerAirHorizVel = new THREE.Vector2();
 
   // Dynamic 60-second Daylight-to-Darkness Sky Progression & Collision Cooldowns
   private nightMix = 0;
@@ -373,6 +389,20 @@ export class TitanicEngine {
 
     this.iceFactory = new IcebergFactory(this.scene, this.textures, this.isSoftwareGl);
     this.particles = new ParticlePool(this.scene, 320);
+    this.submarineCombat = new SubmarineCombatSystem(
+      this.scene,
+      this.particles,
+      this.sound,
+      this.isSoftwareGl,
+    );
+    this.submarineCombat.setActiveShip(this.selectedVessel, this.ship);
+    this.gtaSandbox = new GtaSandboxSystem(
+      this.scene,
+      this.particles,
+      this.sound,
+      this.isSoftwareGl,
+    );
+    this.gtaSandbox.resetForVoyage(this.selectedVessel);
 
     // 7. Crisp PCFSoft Shadow Map
     if (!this.isSoftwareGl) {
@@ -599,6 +629,9 @@ export class TitanicEngine {
 
     this.syncActiveVesselDimensions();
     this.harbor.setActiveVessel(vesselId);
+    this.submarineCombat.setActiveShip(vesselId, this.ship);
+    this.submarineCombat.clearAllEntities();
+    this.gtaSandbox.resetForVoyage(vesselId);
 
     if (this.phase === 'title') {
       this.shipX = spec.berthX;
@@ -664,6 +697,7 @@ export class TitanicEngine {
   private beginVoyageCommon(startInNightIceAlley: boolean): void {
     this.sound.unlock();
     this.clearIcebergs();
+    this.submarineCombat.clearAllEntities();
     this.obstacleCooldowns.clear();
     this.phase = 'playing';
     this.endlessMode = false;
@@ -687,6 +721,8 @@ export class TitanicEngine {
     this.lifeboatsLaunched = 0;
     this.score = 0;
     this.nearMissCount = 0;
+    this.submarinesSunk = 0;
+    this.activeTorpedoes = 0;
     this.combo = 1;
     this.searchlightTimer = 0;
     this.searchlightCooldown = 0;
@@ -705,32 +741,59 @@ export class TitanicEngine {
     this.autopilotSpeedCooldown = 0;
     this.bowPanicActive = false;
     this.panicShoutCooldown = 0;
+    this.playerJumpOffsetY = 0;
+    this.playerJumpVelY = 0;
+    this.playerIsGrounded = true;
+    this.playerHasWalked = false;
+    this.playerLeftDeck = false;
+    this.playerOverboard = false;
+    this.overboardPos.set(0, 0, 0);
+    this.overboardVel.set(0, 0, 0);
+    this.playerAirHorizVel.set(0, 0);
 
     this.resetShipRigPose();
     this.harbor.setActiveVessel(this.selectedVessel);
     this.harbor.resetEscorts();
+    this.submarineCombat.setActiveShip(this.selectedVessel, this.ship);
+    this.gtaSandbox.resetForVoyage(this.selectedVessel);
 
     const spec = VESSEL_SPECS[this.selectedVessel];
+    const isSubmarineMission = this.selectedVessel === 'britannic';
+    const isReefMission = this.selectedVessel === 'concordia';
     this.telegraphIndex = DEFAULT_TELEGRAPH_INDEX;
     this.speedKnots = getEffectiveTelegraphKnots(this.selectedVessel, DEFAULT_TELEGRAPH_INDEX);
     this.voyageElapsedSec = startInNightIceAlley ? 60.0 : 0.0;
     this.startedInNight = startInNightIceAlley;
 
     if (startInNightIceAlley) {
-      this.shipX = 0;
+      this.shipX = isReefMission ? -95 : 0;
       this.shipZ = -850;
       this.harbor.root.visible = false;
       this.applyAtmosphere(1.0);
       this.ship.setPowerLevel(1);
-      this.seedInitialIcebergs();
-      this.eventText = `${spec.name.toUpperCase()} · APRIL 14 NIGHT WATCH — ICE FIELD AHEAD`;
+      if (isSubmarineMission) {
+        this.submarineCombat.seedPatrolSquadron(this.shipX, this.shipZ, true);
+        this.eventText = `${spec.name.toUpperCase()} · APRIL 14 NIGHT WATCH — ENEMY U-BOATS DETECTED`;
+      } else if (isReefMission) {
+        this.gtaSandbox.seedReefField(this.shipX, this.shipZ, true);
+        this.eventText = `${spec.name.toUpperCase()} · COASTAL NIGHT WATCH — GRANITE REEFS AHEAD`;
+      } else {
+        this.seedInitialIcebergs();
+        this.eventText = `${spec.name.toUpperCase()} · APRIL 14 NIGHT WATCH — ICE FIELD AHEAD`;
+      }
     } else {
       // Dock-Start Direct Control right at active Berth (44 / 40 / 38)
       this.shipX = spec.berthX;
       this.shipZ = spec.berthZ;
       this.harbor.root.visible = true;
       this.applyAtmosphere(0);
-      this.seedInitialIcebergs();
+      if (isSubmarineMission) {
+        this.submarineCombat.seedPatrolSquadron(this.shipX, this.shipZ, false);
+      } else if (isReefMission) {
+        this.gtaSandbox.seedReefField(this.shipX, this.shipZ, false);
+      } else {
+        this.seedInitialIcebergs();
+      }
       this.harbor.update(
         this.simTime,
         this.shipX,
@@ -742,11 +805,15 @@ export class TitanicEngine {
         0,
         false,
       );
-      this.eventText = `${spec.name.toUpperCase()} · ${spec.berthLabel.toUpperCase()} — CLEAR BREAKWATERS INTO THE ICE FIELD`;
+      this.eventText = isSubmarineMission
+        ? `${spec.name.toUpperCase()} · ${spec.berthLabel.toUpperCase()} — CLEAR BREAKWATERS INTO U-BOAT WATERS`
+        : isReefMission
+          ? `${spec.name.toUpperCase()} · ${spec.berthLabel.toUpperCase()} — THREAD COASTAL GRANITE REEFS · [B] SPEEDBOAT · [G] CONTRACT`
+          : `${spec.name.toUpperCase()} · ${spec.berthLabel.toUpperCase()} — CLEAR BREAKWATERS INTO THE ICE FIELD`;
       this.sound.playSteamWhistle();
     }
 
-    this.eventTimer = 3.6;
+    this.eventTimer = 3.8;
     this.ship.setWheelhouseFloodLevel(0);
     this.focusVesselSpot('wheelhouse', false);
     this.sound.playTelegraphBell();
@@ -785,15 +852,42 @@ export class TitanicEngine {
   public skipSinking(): void {
     if (this.phase === 'sinking') {
       this.sinkProgress = 1;
-      this.hasBrokenInTwo = true;
-      this.ship.setBreakupVisual(true, 0);
-      this.ship.bowGroup.position.y = -72;
-      this.ship.bowGroup.rotation.x = -0.76;
-      this.ship.sternGroup.position.y = -138;
-      this.ship.sternGroup.rotation.x = -1.46;
+      if (this.selectedVessel === 'britannic') {
+        this.hasBrokenInTwo = false;
+        this.ship.setBreakupVisual(false, 0);
+        this.sinkList = 1.52;
+        this.sinkPitch = -0.48;
+        this.sinkDropY = -58.0;
+        const hingeY = this.sinkDropY - this.activeBreakZ * Math.sin(this.sinkPitch);
+        this.ship.bowGroup.position.y = hingeY;
+        this.ship.bowGroup.rotation.x = this.sinkPitch;
+        this.ship.sternGroup.position.y = hingeY;
+        this.ship.sternGroup.rotation.x = this.sinkPitch;
+        this.ship.hullMeshGroup.visible = false;
+      } else if (this.selectedVessel === 'concordia') {
+        this.hasBrokenInTwo = false;
+        this.ship.setBreakupVisual(false, 0);
+        this.sinkList = 1.18;
+        this.sinkPitch = -0.055;
+        this.sinkDropY = -8.8;
+        const hingeY = this.sinkDropY - this.activeBreakZ * Math.sin(this.sinkPitch);
+        this.ship.bowGroup.position.y = hingeY;
+        this.ship.bowGroup.rotation.x = this.sinkPitch;
+        this.ship.sternGroup.position.y = hingeY;
+        this.ship.sternGroup.rotation.x = this.sinkPitch;
+        this.ship.hullMeshGroup.rotation.z = this.sinkList;
+        this.ship.hullMeshGroup.visible = true;
+      } else {
+        this.hasBrokenInTwo = true;
+        this.ship.setBreakupVisual(true, 0);
+        this.ship.bowGroup.position.y = -72;
+        this.ship.bowGroup.rotation.x = -0.76;
+        this.ship.sternGroup.position.y = -138;
+        this.ship.sternGroup.rotation.x = -1.46;
+        this.ship.hullMeshGroup.visible = false;
+      }
       this.ship.setPowerLevel(0);
       this.ship.setSearchlightBeam(0, false);
-      this.ship.hullMeshGroup.visible = false;
       this.lifeboatsLaunched = this.ship.crewAndLifeboats.updateSinking(
         this.simTime,
         0.016,
@@ -851,7 +945,7 @@ export class TitanicEngine {
 
   private enterAftermath(): void {
     this.phase = 'aftermath';
-    this.ship.hullMeshGroup.visible = false;
+    this.ship.hullMeshGroup.visible = this.selectedVessel === 'concordia';
     this.aftermathSeconds = 0;
     this.carpathiaStage = 'waiting';
     this.carpathiaDistanceM = 460;
@@ -863,10 +957,15 @@ export class TitanicEngine {
     this.aftermathFocus = 'lifeboats';
     this.flareCooldown = 3.5;
     this.carpathia.root.visible = false;
-    if (VESSEL_SPOTS[this.focusSpotIndex].id === 'wheelhouse') {
+    if (!this.playerOverboard && VESSEL_SPOTS[this.focusSpotIndex].id === 'wheelhouse') {
       this.focusVesselSpot('funnels', false);
     }
-    this.eventText = `${VESSEL_SPECS[this.selectedVessel].name.toUpperCase()} SUBMERGED — WAIT FOR RMS CARPATHIA IN THE ICE FIELD`;
+    this.eventText =
+      this.selectedVessel === 'concordia'
+        ? 'COSTA CONCORDIA CAPSIZED ON THE REEF SHELF — AWAITING RESCUE'
+        : this.selectedVessel === 'titanic'
+          ? `${VESSEL_SPECS[this.selectedVessel].name.toUpperCase()} SUBMERGED — WAIT FOR RMS CARPATHIA IN THE ICE FIELD`
+          : `${VESSEL_SPECS[this.selectedVessel].name.toUpperCase()} SUBMERGED — WAIT FOR RMS CARPATHIA IN OPEN WATER`;
     this.eventTimer = 5.5;
     this.saveBestScore();
     this.emitTelemetry();
@@ -876,6 +975,10 @@ export class TitanicEngine {
     this.phase = 'title';
     this.heldKeys.clear();
     this.clearIcebergs();
+    this.submarineCombat.clearAllEntities();
+    this.gtaSandbox.resetForVoyage(this.selectedVessel);
+    this.submarinesSunk = 0;
+    this.activeTorpedoes = 0;
     this.obstacleCooldowns.clear();
     const spec = VESSEL_SPECS[this.selectedVessel];
     this.shipX = spec.berthX;
@@ -903,6 +1006,15 @@ export class TitanicEngine {
     this.autopilotSpeedCooldown = 0;
     this.bowPanicActive = false;
     this.panicShoutCooldown = 0;
+    this.playerJumpOffsetY = 0;
+    this.playerJumpVelY = 0;
+    this.playerIsGrounded = true;
+    this.playerHasWalked = false;
+    this.playerLeftDeck = false;
+    this.playerOverboard = false;
+    this.overboardPos.set(0, 0, 0);
+    this.overboardVel.set(0, 0, 0);
+    this.playerAirHorizVel.set(0, 0);
     this.harbor.root.visible = true;
     this.harbor.setActiveVessel(this.selectedVessel);
     this.harbor.resetEscorts();
@@ -971,6 +1083,14 @@ export class TitanicEngine {
     this.focusSpotIndex = idx;
     const spec = getVesselSpotSpec(this.selectedVessel, VESSEL_SPOTS[idx].id);
     this.interiorWalkOffset.set(0, 0, 0);
+    this.playerJumpOffsetY = 0;
+    this.playerJumpVelY = 0;
+    this.playerIsGrounded = true;
+    this.playerHasWalked = false;
+    this.playerLeftDeck = false;
+    this.playerOverboard = false;
+    this.overboardVel.set(0, 0, 0);
+    this.playerAirHorizVel.set(0, 0);
     this.targetOrbitYaw = spec.defaultOrbitYaw;
     this.targetOrbitPitch = spec.defaultOrbitPitch;
     this.targetOrbitDistance = spec.defaultDistance;
@@ -990,6 +1110,50 @@ export class TitanicEngine {
       this.eventTimer = 1.8;
     }
     this.emitTelemetry();
+  }
+
+  public returnPlayerToShip(): void {
+    const targetSpot: VesselSpotId =
+      this.phase === 'aftermath' || this.phase === 'gameover' ? 'funnels' : 'wheelhouse';
+    this.focusVesselSpot(targetSpot, true);
+  }
+
+  private isOnFootMode(): boolean {
+    if (this.playerOverboard || this.playerLeftDeck || !this.playerIsGrounded) return true;
+    const spot = VESSEL_SPOTS[this.focusSpotIndex];
+    if (spot.id === 'funnels' || spot.id === 'crowsNest') return false;
+    if (spot.id === 'wheelhouse') {
+      return (
+        this.orbitDistance < 4.0 &&
+        (this.isWalkingOnFoot ||
+          this.playerHasWalked ||
+          Math.hypot(this.interiorWalkOffset.x, this.interiorWalkOffset.z) > 0.25)
+      );
+    }
+    return (
+      this.orbitDistance < 8.0 ||
+      this.targetOrbitDistance < 8.0 ||
+      this.isWalkingOnFoot ||
+      this.playerHasWalked
+    );
+  }
+
+  public triggerPlayerJump(): void {
+    if (this.phase !== 'playing' && this.phase !== 'sinking' && this.phase !== 'aftermath') return;
+    if (this.playerOverboard) {
+      const waveY = sampleOceanWaveHeight(this.overboardPos.x, this.overboardPos.z, this.simTime);
+      if (this.overboardPos.y <= waveY + 1.05) {
+        this.overboardVel.y = 4.2;
+      }
+      return;
+    }
+    if (!this.playerIsGrounded || this.playerLeftDeck) return;
+    if (this.targetOrbitDistance > 1.5) {
+      this.targetOrbitDistance = 0;
+    }
+    this.playerHasWalked = true;
+    this.playerIsGrounded = false;
+    this.playerJumpVelY = 6.6;
   }
 
   public cycleFocusSpot(): void {
@@ -1017,6 +1181,62 @@ export class TitanicEngine {
     this.emitTelemetry();
   }
 
+  public toggleSpeedboat(): void {
+    this.sound.unlock();
+    if (this.phase !== 'playing') return;
+    const res = this.gtaSandbox.toggleSpeedboat(this.shipX, this.shipZ, this.headingRad);
+    if (res.boarded) {
+      this.targetOrbitYaw = 0;
+      this.targetOrbitPitch = 0.24;
+      this.targetOrbitDistance = 24;
+      this.orbitYaw = 0;
+      this.orbitPitch = 0.24;
+      this.orbitDistance = 24;
+    } else {
+      this.focusVesselSpot('wheelhouse', false);
+    }
+    this.eventText = res.eventText;
+    this.eventTimer = 3.2;
+    this.emitTelemetry();
+  }
+
+  public toggleSpecialFocus(): void {
+    this.sound.unlock();
+    if (this.phase !== 'playing') return;
+    const active = this.gtaSandbox.toggleSpecialFocus();
+    this.eventText = active
+      ? "CAPTAIN'S FOCUS — SLOW-MOTION & 2X HELM AUTHORITY"
+      : "CAPTAIN'S FOCUS DISENGAGED";
+    this.eventTimer = 2.0;
+    this.emitTelemetry();
+  }
+
+  public startOrCycleMission(): void {
+    this.sound.unlock();
+    if (this.phase !== 'playing') return;
+    const px = this.gtaSandbox.activeCraft === 'speedboat' ? this.gtaSandbox.speedboatX : this.shipX;
+    const pz = this.gtaSandbox.activeCraft === 'speedboat' ? this.gtaSandbox.speedboatZ : this.shipZ;
+    const h = this.gtaSandbox.activeCraft === 'speedboat' ? this.gtaSandbox.speedboatHeading : this.headingRad;
+    const res = this.gtaSandbox.startOrCycleMission(px, pz, h);
+    this.eventText = res.eventText;
+    this.eventTimer = 3.2;
+    this.emitTelemetry();
+  }
+
+  public cycleRadioStation(): void {
+    this.sound.unlock();
+    this.sound.cycleRadioStation();
+    this.eventText = `RADIO: ${this.sound.getRadioStationName().toUpperCase()}`;
+    this.eventTimer = 2.2;
+    this.emitTelemetry();
+  }
+
+  public setRadioStation(station: RadioStationId): void {
+    this.sound.unlock();
+    this.sound.setRadioStation(station);
+    this.emitTelemetry();
+  }
+
   // =========================================================================
   // INPUT & WINDOW EVENTS
   // =========================================================================
@@ -1036,6 +1256,11 @@ export class TitanicEngine {
       return;
     }
 
+    if (code === 'KeyR') {
+      this.cycleRadioStation();
+      return;
+    }
+
     if (this.phase === 'title') {
       if (code === 'Enter' || code === 'Space') {
         e.preventDefault();
@@ -1049,6 +1274,9 @@ export class TitanicEngine {
       if (code === 'Enter') {
         e.preventDefault();
         this.startGame();
+      } else if (code === 'Space' && this.playerOverboard) {
+        e.preventDefault();
+        this.triggerPlayerJump();
       } else if (code === 'KeyV') {
         e.preventDefault();
         this.cycleFocusSpot();
@@ -1065,7 +1293,14 @@ export class TitanicEngine {
         this.cycleFocusSpot();
       } else if (code === 'KeyC') {
         this.toggleCameraMode();
-      } else if (code === 'Enter' || code === 'Space') {
+      } else if (code === 'Space') {
+        e.preventDefault();
+        if (this.isOnFootMode()) {
+          this.triggerPlayerJump();
+        } else {
+          this.skipSinking();
+        }
+      } else if (code === 'Enter') {
         e.preventDefault();
         this.skipSinking();
       }
@@ -1076,10 +1311,26 @@ export class TitanicEngine {
 
     this.heldKeys.add(code);
 
-    if (code === 'KeyZ' || code === 'ArrowUp') {
+    if (code === 'KeyB') {
+      e.preventDefault();
+      this.toggleSpeedboat();
+      return;
+    } else if (code === 'KeyU') {
+      e.preventDefault();
+      this.toggleSpecialFocus();
+      return;
+    } else if (code === 'KeyG') {
+      e.preventDefault();
+      this.startOrCycleMission();
+      return;
+    }
+
+    const drivingSpeedboat = this.gtaSandbox.activeCraft === 'speedboat';
+
+    if ((code === 'KeyZ' || code === 'ArrowUp') && !drivingSpeedboat) {
       e.preventDefault();
       this.stepTelegraph(1);
-    } else if (code === 'KeyX' || code === 'ArrowDown') {
+    } else if ((code === 'KeyX' || code === 'ArrowDown') && !drivingSpeedboat) {
       e.preventDefault();
       this.stepTelegraph(-1);
     } else if (code === 'KeyT') {
@@ -1087,10 +1338,21 @@ export class TitanicEngine {
       this.toggleAutopilot();
     } else if (code === 'KeyV') {
       e.preventDefault();
-      this.cycleFocusSpot();
-    } else if (code === 'Space') {
+      if (drivingSpeedboat) {
+        this.toggleSpeedboat();
+      } else {
+        this.cycleFocusSpot();
+      }
+    } else if (code === 'KeyF') {
       e.preventDefault();
       this.triggerSearchlight();
+    } else if (code === 'Space') {
+      e.preventDefault();
+      if (this.isOnFootMode() && !drivingSpeedboat) {
+        this.triggerPlayerJump();
+      } else {
+        this.triggerSearchlight();
+      }
     } else if (code === 'KeyC') {
       this.toggleCameraMode();
     }
@@ -1360,7 +1622,21 @@ export class TitanicEngine {
         this.advanceRescueSimulation(dt);
         this.checkAuxVesselCollisions(dt);
       }
-      this.iceFactory.updateTransforms(this.icebergs, this.shipX, this.shipZ, this.simTime);
+      if (this.selectedVessel === 'titanic') {
+        this.iceFactory.updateTransforms(this.icebergs, this.shipX, this.shipZ, this.simTime);
+      } else if (this.selectedVessel === 'britannic') {
+        this.submarineCombat.update(
+          dt,
+          this.simTime,
+          this.shipX,
+          this.shipZ,
+          this.headingRad,
+          this.speedKnots,
+          1.0,
+          this.activeHullCheckPoints,
+          false,
+        );
+      }
       this.applyAtmosphere(1.0, this.phase === 'gameover' ? this.rescueDawnMix : 0);
       this.oceanAndSky.update(
         this.simTime,
@@ -1380,13 +1656,16 @@ export class TitanicEngine {
     }
 
     // =======================================================================
-    // ACTIVE GAMEPLAY SIMULATION (Direct Control / Autopilot -> Channel -> Night)
+    // ACTIVE GAMEPLAY SIMULATION (Liner Helm / Speedboat / GTA 6 Open World)
     // =======================================================================
+    const worldDt = this.gtaSandbox.specialFocusActive ? dt * 0.42 : dt;
+    const drivingSpeedboat = this.gtaSandbox.activeCraft === 'speedboat';
+
     const prevRudder = this.rudderDeg;
     if (this.autopilotEnabled) {
       this.computeAutopilotCommand(dt);
       this.rudderDeg = MathUtils.damp(this.rudderDeg, this.autopilotTargetRudder, 5.2, dt);
-    } else {
+    } else if (!drivingSpeedboat) {
       const steerLeft = this.heldKeys.has('ArrowLeft') || this.heldKeys.has('KeyQ');
       const steerRight = this.heldKeys.has('ArrowRight') || this.heldKeys.has('KeyE');
 
@@ -1402,6 +1681,8 @@ export class TitanicEngine {
         // Gently relax rudder back toward amidships when keys released
         this.rudderDeg = MathUtils.damp(this.rudderDeg, 0, 1.8, dt);
       }
+    } else {
+      this.rudderDeg = MathUtils.damp(this.rudderDeg, 0, 2.2, dt);
     }
 
     if (this.bowPanicActive) {
@@ -1421,18 +1702,21 @@ export class TitanicEngine {
       }
     }
 
-    // W / A / S / D & I / J / K / L Smooth Interior & Deck Walking
-    this.stepInteriorWalk(dt);
+    // W / A / S / D & I / J / K / L Smooth Interior & Deck Walking (paused when driving speedboat)
+    if (!drivingSpeedboat) {
+      this.stepInteriorWalk(dt);
+    }
 
     // Telegraph speed interpolation (responsive liner momentum per vessel class)
     const targetKnots = getEffectiveTelegraphKnots(this.selectedVessel, this.telegraphIndex);
     const accelRate = targetKnots < this.speedKnots ? 0.75 : 0.62;
     this.speedKnots = MathUtils.damp(this.speedKnots, targetKnots, accelRate, dt);
 
-    // Rudder authority scales with speed (with low-speed tug/thruster nudge so dock maneuvering works cleanly)
+    // Rudder authority scales with speed (Captain's Focus doubles helm authority)
     const speedAuthority = 0.36 + 0.64 * Math.min(1, Math.abs(this.speedKnots) / 20);
     const reverseSign = this.speedKnots < -1 ? -0.65 : 1;
-    const turnMult = VESSEL_SPECS[this.selectedVessel].turnMultiplier;
+    const focusMult = this.gtaSandbox.specialFocusActive ? 1.85 : 1.0;
+    const turnMult = VESSEL_SPECS[this.selectedVessel].turnMultiplier * focusMult;
     const targetYawRate = (this.rudderDeg / 35) * 0.36 * speedAuthority * reverseSign * turnMult;
     this.yawRate = MathUtils.damp(this.yawRate, targetYawRate, 2.4, dt);
     this.headingRad += this.yawRate * dt;
@@ -1441,19 +1725,20 @@ export class TitanicEngine {
     const worldSpeed = this.speedKnots * 2.15; // units/sec
     const fwdX = Math.sin(this.headingRad);
     const fwdZ = -Math.cos(this.headingRad);
-    this.shipX += fwdX * worldSpeed * dt;
-    this.shipZ += fwdZ * worldSpeed * dt;
+    this.shipX += fwdX * worldSpeed * worldDt;
+    this.shipZ += fwdZ * worldSpeed * worldDt;
 
     // Progress Nautical Miles & Score rapidly toward destination
-    if (this.speedKnots > 0.2) {
-      const distStep = worldSpeed * dt;
+    const activeCraftSpd = drivingSpeedboat ? this.gtaSandbox.speedboatKnots * 1.55 : worldSpeed;
+    if (activeCraftSpd > 0.4) {
+      const distStep = activeCraftSpd * worldDt;
       const nmDelta = distStep / 400;
       this.distanceNm += nmDelta;
-      this.score += nmDelta * (120 + this.speedKnots * 6);
+      this.score += nmDelta * (120 + Math.abs(activeCraftSpd) * 3.5);
     }
 
     // Exact 60-second (1-minute) daylight -> golden sunset -> twilight -> starry night sky transition
-    this.voyageElapsedSec += dt;
+    this.voyageElapsedSec += worldDt;
     const skyMix = this.startedInNight
       ? 1.0
       : MathUtils.smoothstep(this.voyageElapsedSec, 0, 60.0);
@@ -1468,7 +1753,7 @@ export class TitanicEngine {
         this.speedKnots,
         this.floodingPct,
         skyMix,
-        dt,
+        worldDt,
         true,
       );
       this.processHarborBreakEvents();
@@ -1487,9 +1772,9 @@ export class TitanicEngine {
 
     // Slow, resilient progressive water ingress only after serious compartment breaches
     if (this.hullIntegrity <= 78) {
-      const damageSeverity = (80 - this.hullIntegrity) / 80; // 0.025 -> 1.0
+      const damageSeverity = (80 - this.hullIntegrity) / 80;
       this.waterIngressRate = 0.28 + damageSeverity * damageSeverity * 1.35;
-      this.floodingPct = Math.min(100, this.floodingPct + this.waterIngressRate * dt);
+      this.floodingPct = Math.min(100, this.floodingPct + this.waterIngressRate * worldDt);
     } else {
       this.waterIngressRate = 0;
     }
@@ -1505,17 +1790,19 @@ export class TitanicEngine {
     this.populateCruiseAwareness(skyMix < 0.45);
     this.ship.crewAndLifeboats.updateCruising(
       this.simTime,
-      dt,
+      worldDt,
       this.floodingPct,
       this.ship.root,
       this.cruiseAwareness,
     );
-    this.emitBowSpray(dt, fwdX, fwdZ);
+    this.emitBowSpray(worldDt, fwdX, fwdZ);
     this.applyAtmosphere(skyMix);
+    const focusCamX = drivingSpeedboat ? this.gtaSandbox.speedboatX : this.shipX;
+    const focusCamZ = drivingSpeedboat ? this.gtaSandbox.speedboatZ : this.shipZ;
     this.oceanAndSky.update(
       this.simTime,
-      this.shipX,
-      this.shipZ,
+      focusCamX,
+      focusCamZ,
       this.headingRad,
       this.speedKnots,
       skyMix,
@@ -1523,22 +1810,121 @@ export class TitanicEngine {
       1.0,
     );
 
-    // Seed & continuously stream thousands of GPU-instanced icebergs ahead along the path
-    if (!this.initialIceSeeded && this.icebergs.length === 0) {
-      this.seedInitialIcebergs();
+    // Hazards strictly per vessel: Titanic -> 2,800 icebergs; Britannic -> U-boats; Concordia -> Granite Reefs
+    if (this.selectedVessel === 'titanic') {
+      if (!this.initialIceSeeded && this.icebergs.length === 0) {
+        this.seedInitialIcebergs();
+      }
+      this.manageIcebergField(worldDt, worldSpeed, fwdX, fwdZ);
+      this.checkAllObstacles(worldDt, fwdX, fwdZ);
+    } else if (this.selectedVessel === 'britannic') {
+      this.checkAllObstacles(worldDt, fwdX, fwdZ);
+      const combatRes = this.submarineCombat.update(
+        worldDt,
+        this.simTime,
+        this.shipX,
+        this.shipZ,
+        this.headingRad,
+        this.speedKnots,
+        skyMix,
+        this.activeHullCheckPoints,
+        true,
+      );
+      this.score += combatRes.scoreDelta;
+      this.submarinesSunk += combatRes.submarinesSunkDelta;
+      this.activeTorpedoes = combatRes.activeTorpedoes;
+      if (combatRes.submarinesSunkDelta > 0) {
+        this.gtaSandbox.cash += combatRes.submarinesSunkDelta * 600;
+        this.gtaSandbox.rep += combatRes.submarinesSunkDelta * 180;
+      }
+      if (combatRes.eventText) {
+        this.eventText = combatRes.eventText;
+        this.eventTimer = 3.2;
+      }
+      if (!this.icebergWarning && combatRes.threatWarning) {
+        this.icebergWarning = combatRes.threatWarning;
+        this.closestHazardSide = combatRes.hazardSide;
+      }
+      if (combatRes.torpedoHit) {
+        const hit = combatRes.torpedoHit;
+        const rightX = Math.cos(this.headingRad);
+        const rightZ = Math.sin(this.headingRad);
+        const pushSide = hit.sideSign >= 0 ? -1 : 1;
+        this.applyHullBreach(
+          185,
+          rightX * pushSide,
+          rightZ * pushSide,
+          1.8,
+          hit.hitX,
+          hit.hitZ,
+          1.0,
+          72,
+          hit.isBow,
+          'U-BOAT TORPEDO STRIKE',
+          hit.sideSign,
+        );
+      }
+    } else {
+      // Costa Concordia coastal navigation + Granite Reefs
+      this.checkAllObstacles(worldDt, fwdX, fwdZ);
     }
-    this.manageIcebergField(dt, worldSpeed, fwdX, fwdZ);
 
-    // Check Collisions with ALL Objects (Tugs, Pilot Vessel, Lifeboats, Quay, Breakwater, Buoys, Icebergs)
-    this.checkAllObstacles(dt, fwdX, fwdZ);
-    this.checkAuxVesselCollisions(dt);
+    // GTA 6 Sandbox Step (Speedboat, Wanted Pursuit, Contracts, Concordia Reefs, Radar Blips)
+    const inHarborZone = Math.hypot(focusCamX, focusCamZ) < 620;
+    const sandboxRes = this.gtaSandbox.update({
+      dt,
+      worldDt,
+      simTime: this.simTime,
+      vesselId: this.selectedVessel,
+      shipX: this.shipX,
+      shipZ: this.shipZ,
+      shipHeadingRad: this.headingRad,
+      shipKnots: this.speedKnots,
+      shipHalfBeam: VESSEL_SPECS[this.selectedVessel].halfBeam,
+      inHarborZone,
+      heldKeys: this.heldKeys,
+      submarines: this.selectedVessel === 'britannic' ? this.submarineCombat.getActiveSubmarines() : undefined,
+      icebergs: this.selectedVessel === 'titanic' ? this.icebergs : undefined,
+    });
+    this.score += sandboxRes.scoreDelta;
+    this.nearMissCount += sandboxRes.nearMissDelta;
+    if (sandboxRes.warningText && !this.icebergWarning) {
+      this.icebergWarning = sandboxRes.warningText;
+      this.closestHazardSide = sandboxRes.warningSide;
+    }
+    if (sandboxRes.eventText) {
+      this.eventText = sandboxRes.eventText;
+      this.eventTimer = 3.0;
+    }
+    if (sandboxRes.reefHit) {
+      const rh = sandboxRes.reefHit;
+      this.applyHullBreach(
+        rh.rawDmg,
+        rh.nx,
+        rh.nz,
+        rh.overlap,
+        rh.hitX,
+        rh.hitZ,
+        Math.max(0.35, Math.abs(this.speedKnots) / 20),
+        rh.floodJump,
+        rh.isBow,
+        'GRANITE REEF SHOAL',
+        rh.sideSign,
+      );
+    }
+    if (sandboxRes.patrolImpactOnShip) {
+      const pi = sandboxRes.patrolImpactOnShip;
+      this.applyHullBreach(24, pi.nx, pi.nz, 1.2, pi.hitX, pi.hitZ, 0.5, 6, false, 'COAST GUARD INTERCEPTOR', 1);
+    }
 
-    this.particles.update(dt);
+    this.checkAuxVesselCollisions(worldDt);
+
+    this.particles.update(worldDt);
     this.shakeIntensity = Math.max(0, this.shakeIntensity - dt * 1.9);
 
     this.updateCamera(dt);
     this.syncUnderwaterCameraEffects(skyMix, dt);
-    this.sound.updateShipAmbience(this.speedKnots, true);
+    this.sound.updateShipAmbience(this.speedKnots, !drivingSpeedboat);
 
     // Check Sinking Trigger (Hull Breached OR Water Overwhelms Bulkheads)
     if (this.hullIntegrity <= 0 || this.floodingPct >= 100) {
@@ -1549,6 +1935,8 @@ export class TitanicEngine {
     if (!this.endlessMode && this.distanceNm >= TARGET_VOYAGE_NM) {
       this.distanceNm = TARGET_VOYAGE_NM;
       this.score += Math.round(this.hullIntegrity * 25);
+      this.gtaSandbox.cash += 1500;
+      this.gtaSandbox.rep += 450;
       this.phase = 'victory';
       this.saveBestScore();
       this.sound.playSteamWhistle();
@@ -1601,7 +1989,7 @@ export class TitanicEngine {
     const circleObs = harborActive ? this.harbor.getCircleObstacles() : null;
     const boxObs = harborActive ? this.harbor.getBoxObstacles() : null;
 
-    // Spatial pre-filter so autopilot scans only nearby icebergs out of the 2,800-berg field
+    // Spatial pre-filter so autopilot scans only nearby icebergs or U-boats/torpedoes
     this.nearbyAutopilotBergs.length = 0;
     for (let i = 0; i < this.icebergs.length; i++) {
       const berg = this.icebergs[i];
@@ -1609,6 +1997,10 @@ export class TitanicEngine {
         this.nearbyAutopilotBergs.push(berg);
       }
     }
+    const subObstacles =
+      this.selectedVessel === 'britannic' ? this.submarineCombat.getAutopilotObstacles() : null;
+    const reefObstacles =
+      this.selectedVessel === 'concordia' ? this.gtaSandbox.getReefAutopilotObstacles() : null;
 
     let bestDeg = 0;
     let bestScore = -Infinity;
@@ -1656,6 +2048,49 @@ export class TitanicEngine {
             if (dist < req + evalRadii[h]) {
               const deficit = req + evalRadii[h] - dist;
               penalty += clear < 5 ? 90000 + deficit * 4500 : deficit * 260;
+            }
+          }
+        }
+
+        // Check U-boats and incoming torpedoes when commanding Britannic
+        if (subObstacles) {
+          for (let sIdx = 0; sIdx < subObstacles.length; sIdx++) {
+            const obs = subObstacles[sIdx];
+            const ox = obs.x + obs.vx * tSim;
+            const oz = obs.z + obs.vz * tSim;
+            const req = obs.radius + 18.0;
+
+            for (let h = 0; h < 4; h++) {
+              const px = sx + fx * -evalZones[h];
+              const pz = sz + fz * -evalZones[h];
+              const dist = Math.hypot(px - ox, pz - oz);
+              const clear = dist - (obs.radius + evalRadii[h]);
+              if (clear < minClear) minClear = clear;
+              if (dist < req + evalRadii[h]) {
+                const deficit = req + evalRadii[h] - dist;
+                penalty += clear < 6 ? 95000 + deficit * 4800 : deficit * 320;
+              }
+            }
+          }
+        }
+
+        // Check granite reef shoals when commanding Costa Concordia
+        if (reefObstacles) {
+          for (let rIdx = 0; rIdx < reefObstacles.length; rIdx++) {
+            const reef = reefObstacles[rIdx];
+            if (Math.abs(reef.z - sz) > 260 || Math.abs(reef.x - sx) > 220) continue;
+            const req = reef.radius + 20.5;
+
+            for (let h = 0; h < 4; h++) {
+              const px = sx + fx * -evalZones[h];
+              const pz = sz + fz * -evalZones[h];
+              const dist = Math.hypot(px - reef.x, pz - reef.z);
+              const clear = dist - (reef.radius + evalRadii[h]);
+              if (clear < minClear) minClear = clear;
+              if (dist < req + evalRadii[h]) {
+                const deficit = req + evalRadii[h] - dist;
+                penalty += clear < 6 ? 92000 + deficit * 4600 : deficit * 300;
+              }
             }
           }
         }
@@ -1800,10 +2235,10 @@ export class TitanicEngine {
   }
 
   private getExteriorDeckEyeY(localZ: number): number {
-    if (this.selectedVessel === 'lusitania') {
-      if (localZ < -31.5) return 11.25; // Raised Forecastle
-      if (localZ <= 120.0) return 14.62; // Promenade & Boat Deck
-      return 10.1; // Flush Cunard Shelter Aft Deck
+    if (this.selectedVessel === 'concordia') {
+      if (localZ < -18.0) return 12.2; // Foredeck
+      if (localZ <= 178.0) return 13.0; // Deck 4 Promenade
+      return 18.0; // Aft Lido Terraces
     }
     if (localZ < -35.0) return 11.25; // Forecastle Bow
     if (localZ < -9.5) return 8.45; // Forward Well Deck
@@ -1814,14 +2249,14 @@ export class TitanicEngine {
 
   private getExteriorDeckHalfBeam(localZ: number): number {
     const vSpec = VESSEL_SPECS[this.selectedVessel];
-    if (this.selectedVessel === 'lusitania') {
-      if (localZ < -31.5) {
-        return MathUtils.clamp(((localZ - vSpec.bowZ) / 34.5) * 11.0, 1.8, 11.0);
+    if (this.selectedVessel === 'concordia') {
+      if (localZ < -18.0) {
+        return MathUtils.clamp(((localZ - vSpec.bowZ) / 62.0) * 14.0, 2.2, 14.0);
       }
-      if (localZ > 142.0) {
-        return MathUtils.clamp(((vSpec.sternZ - localZ) / 31.8) * 10.0, 2.0, 10.0);
+      if (localZ > 178.0) {
+        return MathUtils.clamp(((vSpec.sternZ - localZ) / 32.2) * 12.0, 2.5, 12.0);
       }
-      return vSpec.halfBeam - 0.5;
+      return vSpec.halfBeam - 0.55;
     }
     if (localZ < -35.0) {
       return MathUtils.clamp(((localZ + 73.0) / 38.0) * 11.8, 1.8, 11.8);
@@ -1841,12 +2276,77 @@ export class TitanicEngine {
       (this.heldKeys.has('KeyA') || this.heldKeys.has('KeyJ') ? 1 : 0);
 
     this.isWalkingOnFoot = walkFwd !== 0 || walkStrafe !== 0;
-    if (!this.isWalkingOnFoot) return;
+
+    if (this.playerOverboard) {
+      const fwdX = Math.sin(this.headingRad);
+      const fwdZ = -Math.cos(this.headingRad);
+      const rightX = Math.cos(this.headingRad);
+      const rightZ = Math.sin(this.headingRad);
+      const lookLocalX = -Math.sin(this.orbitYaw);
+      const lookLocalZ = -Math.cos(this.orbitYaw);
+      const rightLocalX = Math.cos(this.orbitYaw);
+      const rightLocalZ = -Math.sin(this.orbitYaw);
+
+      const moveLocalX = lookLocalX * walkFwd + rightLocalX * walkStrafe;
+      const moveLocalZ = lookLocalZ * walkFwd + rightLocalZ * walkStrafe;
+      let wx = rightX * moveLocalX + fwdX * -moveLocalZ;
+      let wz = rightZ * moveLocalX + fwdZ * -moveLocalZ;
+      const wLen = Math.hypot(wx, wz);
+
+      if (wLen > 0.001) {
+        wx /= wLen;
+        wz /= wLen;
+        const swimSpeed = 5.4;
+        this.overboardVel.x = MathUtils.damp(this.overboardVel.x, wx * swimSpeed, 4.5, dt);
+        this.overboardVel.z = MathUtils.damp(this.overboardVel.z, wz * swimSpeed, 4.5, dt);
+      } else {
+        this.overboardVel.x = MathUtils.damp(this.overboardVel.x, 0, 3.0, dt);
+        this.overboardVel.z = MathUtils.damp(this.overboardVel.z, 0, 3.0, dt);
+      }
+
+      const waveY = sampleOceanWaveHeight(this.overboardPos.x, this.overboardPos.z, this.simTime);
+      const surfaceEyeY = waveY + 0.62;
+      if (this.overboardPos.y < surfaceEyeY) {
+        const subDepth = surfaceEyeY - this.overboardPos.y;
+        this.overboardVel.y += subDepth * 28.0 * dt;
+        this.overboardVel.y *= Math.exp(-4.6 * dt);
+        if (Math.random() < 0.32) {
+          this.particles.emit(
+            this.overboardPos.x + (Math.random() - 0.5) * 0.9,
+            Math.min(waveY, this.overboardPos.y - 0.1),
+            this.overboardPos.z + (Math.random() - 0.5) * 0.9,
+            (Math.random() - 0.5) * 0.8,
+            1.6 + Math.random() * 1.4,
+            (Math.random() - 0.5) * 0.8,
+            0.14,
+            0.9,
+            -2.4,
+            0xcbeeff,
+          );
+        }
+      } else {
+        this.overboardVel.y -= 13.5 * dt;
+      }
+
+      this.overboardPos.addScaledVector(this.overboardVel, dt);
+      if (this.overboardPos.y < waveY - 7.5) {
+        this.overboardPos.y = waveY - 7.5;
+        if (this.overboardVel.y < 0) this.overboardVel.y = 0;
+      }
+      return;
+    }
+
+    if (!this.isWalkingOnFoot && this.playerIsGrounded && !this.playerLeftDeck) return;
+
+    if (this.isWalkingOnFoot) {
+      this.playerHasWalked = true;
+    }
 
     let spec = getVesselSpotSpec(this.selectedVessel, VESSEL_SPOTS[this.focusSpotIndex].id);
     if (spec.id === 'funnels' || spec.id === 'crowsNest') {
       this.focusVesselSpot('lifeboats', false);
       spec = getVesselSpotSpec(this.selectedVessel, VESSEL_SPOTS[this.focusSpotIndex].id);
+      this.playerHasWalked = true;
     }
 
     if (this.targetOrbitDistance > 1.5) {
@@ -1860,16 +2360,26 @@ export class TitanicEngine {
     const rightLocalZ = -Math.sin(this.orbitYaw);
 
     const moveSpeed = 7.4;
-    let vx = lookLocalX * walkFwd + rightLocalX * walkStrafe;
-    let vz = lookLocalZ * walkFwd + rightLocalZ * walkStrafe;
-    const len = Math.hypot(vx, vz) || 1;
-    vx /= len;
-    vz /= len;
-
-    this.interiorWalkOffset.x += vx * moveSpeed * dt;
-    this.interiorWalkOffset.z += vz * moveSpeed * dt;
+    let stepX = 0;
+    let stepZ = 0;
+    if (this.isWalkingOnFoot) {
+      let vx = lookLocalX * walkFwd + rightLocalX * walkStrafe;
+      let vz = lookLocalZ * walkFwd + rightLocalZ * walkStrafe;
+      const len = Math.hypot(vx, vz) || 1;
+      vx /= len;
+      vz /= len;
+      stepX = vx * moveSpeed * dt;
+      stepZ = vz * moveSpeed * dt;
+      this.playerAirHorizVel.set(vx * moveSpeed, vz * moveSpeed);
+    } else if (!this.playerIsGrounded) {
+      this.playerAirHorizVel.multiplyScalar(Math.exp(-1.5 * dt));
+      stepX = this.playerAirHorizVel.x * dt;
+      stepZ = this.playerAirHorizVel.y * dt;
+    }
 
     if (spec.category === 'interior' && spec.walkBounds) {
+      this.interiorWalkOffset.x += stepX;
+      this.interiorWalkOffset.z += stepZ;
       const minOffX = spec.walkBounds.minX - spec.localTarget[0];
       const maxOffX = spec.walkBounds.maxX - spec.localTarget[0];
       const minOffZ = spec.walkBounds.minZ - spec.localTarget[2];
@@ -1877,22 +2387,129 @@ export class TitanicEngine {
       this.interiorWalkOffset.x = MathUtils.clamp(this.interiorWalkOffset.x, minOffX, maxOffX);
       this.interiorWalkOffset.z = MathUtils.clamp(this.interiorWalkOffset.z, minOffZ, maxOffZ);
       this.interiorWalkOffset.y = 0;
-    } else {
-      const vSpec = VESSEL_SPECS[this.selectedVessel];
-      const worldLocalZ = MathUtils.clamp(
-        spec.localTarget[2] + this.interiorWalkOffset.z,
-        vSpec.bowZ + 5.0,
-        vSpec.sternZ - 4.5,
-      );
-      const halfBeam = this.getExteriorDeckHalfBeam(worldLocalZ);
-      const worldLocalX = MathUtils.clamp(
-        spec.localTarget[0] + this.interiorWalkOffset.x,
-        -halfBeam,
-        halfBeam,
-      );
-      this.interiorWalkOffset.x = worldLocalX - spec.localTarget[0];
-      this.interiorWalkOffset.z = worldLocalZ - spec.localTarget[2];
-      this.interiorWalkOffset.y = this.getExteriorDeckEyeY(worldLocalZ) - spec.localTarget[1];
+      if (!this.playerIsGrounded) {
+        this.playerJumpVelY -= 16.0 * dt;
+        this.playerJumpOffsetY += this.playerJumpVelY * dt;
+        if (this.playerJumpOffsetY <= 0) {
+          this.playerJumpOffsetY = 0;
+          this.playerJumpVelY = 0;
+          this.playerIsGrounded = true;
+          this.playerAirHorizVel.set(0, 0);
+        }
+      }
+      return;
+    }
+
+    const vSpec = VESSEL_SPECS[this.selectedVessel];
+    const minDeckZ = vSpec.bowZ + 2.5;
+    const maxDeckZ = vSpec.sternZ - 2.0;
+    const curLocalX = spec.localTarget[0] + this.interiorWalkOffset.x;
+    const curLocalZ = spec.localTarget[2] + this.interiorWalkOffset.z;
+    let nextLocalX = curLocalX + stepX;
+    let nextLocalZ = curLocalZ + stepZ;
+
+    if (!this.playerLeftDeck) {
+      const withinForeAft = nextLocalZ >= minDeckZ && nextLocalZ <= maxDeckZ;
+      const halfBeam = withinForeAft ? this.getExteriorDeckHalfBeam(nextLocalZ) : 0;
+      const overDeckHoriz = withinForeAft && Math.abs(nextLocalX) <= halfBeam;
+
+      if (overDeckHoriz) {
+        const prevDeckEyeY = spec.localTarget[1] + this.interiorWalkOffset.y;
+        const nextDeckEyeY = this.getExteriorDeckEyeY(nextLocalZ);
+        if (!this.playerIsGrounded && Math.abs(prevDeckEyeY - nextDeckEyeY) > 0.25) {
+          this.playerJumpOffsetY += prevDeckEyeY - nextDeckEyeY;
+        }
+        this.interiorWalkOffset.x = nextLocalX - spec.localTarget[0];
+        this.interiorWalkOffset.z = nextLocalZ - spec.localTarget[2];
+        this.interiorWalkOffset.y = nextDeckEyeY - spec.localTarget[1];
+
+        if (!this.playerIsGrounded) {
+          this.playerJumpVelY -= 16.0 * dt;
+          this.playerJumpOffsetY += this.playerJumpVelY * dt;
+          if (this.playerJumpOffsetY <= 0) {
+            this.playerJumpOffsetY = 0;
+            this.playerJumpVelY = 0;
+            this.playerIsGrounded = true;
+            this.playerAirHorizVel.set(0, 0);
+          }
+        }
+      } else if (this.playerJumpOffsetY >= 0.42) {
+        // Player jumped high enough to clear the ship's deck railing — vault overboard!
+        this.playerLeftDeck = true;
+        this.playerIsGrounded = false;
+        this.interiorWalkOffset.x = nextLocalX - spec.localTarget[0];
+        this.interiorWalkOffset.z = nextLocalZ - spec.localTarget[2];
+      } else {
+        // Railing stops normal walking when below jump clearance height
+        const clampedZ = MathUtils.clamp(nextLocalZ, minDeckZ, maxDeckZ);
+        const clampedHalf = this.getExteriorDeckHalfBeam(clampedZ);
+        const clampedX = MathUtils.clamp(nextLocalX, -clampedHalf, clampedHalf);
+        const nextDeckEyeY = this.getExteriorDeckEyeY(clampedZ);
+        this.interiorWalkOffset.x = clampedX - spec.localTarget[0];
+        this.interiorWalkOffset.z = clampedZ - spec.localTarget[2];
+        this.interiorWalkOffset.y = nextDeckEyeY - spec.localTarget[1];
+
+        if (!this.playerIsGrounded) {
+          this.playerJumpVelY -= 16.0 * dt;
+          this.playerJumpOffsetY += this.playerJumpVelY * dt;
+          if (this.playerJumpOffsetY <= 0) {
+            this.playerJumpOffsetY = 0;
+            this.playerJumpVelY = 0;
+            this.playerIsGrounded = true;
+            this.playerAirHorizVel.set(0, 0);
+          }
+        }
+      }
+    }
+
+    if (this.playerLeftDeck) {
+      this.playerJumpVelY -= 16.0 * dt;
+      this.playerJumpOffsetY += this.playerJumpVelY * dt;
+
+      if (nextLocalZ > vSpec.bowZ + 1.0 && nextLocalZ < vSpec.sternZ - 1.0) {
+        const hullClear = this.getExteriorDeckHalfBeam(nextLocalZ) + 1.15;
+        if (Math.abs(nextLocalX) < hullClear) {
+          nextLocalX = (nextLocalX >= 0 ? 1 : -1) * hullClear;
+        }
+      }
+
+      this.interiorWalkOffset.x = nextLocalX - spec.localTarget[0];
+      this.interiorWalkOffset.z = nextLocalZ - spec.localTarget[2];
+
+      const localEyeY = spec.localTarget[1] + this.interiorWalkOffset.y + this.playerJumpOffsetY;
+      const useSternHalf = nextLocalZ > this.activeBreakZ;
+      const halfGroup = useSternHalf ? this.ship.sternGroup : this.ship.bowGroup;
+      const halfY = halfGroup.position.y;
+      const halfPitch = halfGroup.rotation.x;
+      const hullRoll = this.ship.hullMeshGroup.rotation.z;
+      const dzBreak = nextLocalZ - this.activeBreakZ;
+      const rotY = localEyeY * Math.cos(halfPitch) - dzBreak * Math.sin(halfPitch);
+      const rotZ = this.activeBreakZ + localEyeY * Math.sin(halfPitch) + dzBreak * Math.cos(halfPitch);
+      const shiftedY = halfY + rotY;
+      const rolledX = nextLocalX * Math.cos(hullRoll) - shiftedY * Math.sin(hullRoll);
+      const rolledY = nextLocalX * Math.sin(hullRoll) + shiftedY * Math.cos(hullRoll);
+
+      const fwdX = Math.sin(this.headingRad);
+      const fwdZ = -Math.cos(this.headingRad);
+      const rightX = Math.cos(this.headingRad);
+      const rightZ = Math.sin(this.headingRad);
+      const worldX = this.shipX + rightX * rolledX + fwdX * -rotZ;
+      const worldZ = this.shipZ + rightZ * rolledX + fwdZ * -rotZ;
+      const waveY = sampleOceanWaveHeight(worldX, worldZ, this.simTime);
+
+      if (rolledY <= waveY + 0.68) {
+        this.playerOverboard = true;
+        this.playerLeftDeck = false;
+        this.overboardPos.set(worldX, Math.max(waveY - 2.0, rolledY), worldZ);
+        this.overboardVel.set(0, Math.max(-9.0, Math.min(-3.5, this.playerJumpVelY * 0.56)), 0);
+        this.playerJumpOffsetY = 0;
+        this.playerJumpVelY = 0;
+        this.particles.burstIceImpact(worldX, waveY + 0.4, worldZ, 28);
+        this.sound.playCollisionImpact(0.38);
+        this.eventText = 'MAN OVERBOARD — SWIM WITH W/A/S/D · JUMP WITH SPACE · RETURN WITH V';
+        this.eventTimer = 5.5;
+        this.emitTelemetry();
+      }
     }
   }
 
@@ -1904,6 +2521,8 @@ export class TitanicEngine {
       this.phase === 'victory' ||
       (this.phase === 'sinking' && spec.id === 'engine' && this.sinkProgress < 0.58);
     const insideDryCompartment =
+      !this.playerOverboard &&
+      !this.playerLeftDeck &&
       compartmentDry &&
       (spec.id === 'dining' ||
         spec.id === 'engine' ||
@@ -1991,11 +2610,29 @@ export class TitanicEngine {
   }
 
   private stepSinkingSequence(dt: number): void {
-    // Sinking speed visibly decelerates once hull reaches 0% integrity and becomes submerged
+    const vessel = this.selectedVessel;
     const prevP = this.sinkProgress;
     const isSubmerged = this.hullIntegrity <= 0 && prevP >= 0.38;
     const isFullySubmerged = this.hullIntegrity <= 0 && prevP >= 0.72;
-    const sinkDuration = isFullySubmerged ? 64.0 : isSubmerged ? 40.0 : 18.0;
+
+    // Distinct sink pacing per vessel (Concordia capsizes half-submerged on reef shelf; Britannic capsizes intact; Titanic breaks in two)
+    const sinkDuration =
+      vessel === 'concordia'
+        ? isSubmerged
+          ? 38.0
+          : 18.0
+        : vessel === 'britannic'
+          ? isFullySubmerged
+            ? 52.0
+            : isSubmerged
+              ? 36.0
+              : 18.0
+          : isFullySubmerged
+            ? 64.0
+            : isSubmerged
+              ? 40.0
+              : 18.0;
+
     this.sinkProgress = Math.min(1, prevP + dt / sinkDuration);
     const p = this.sinkProgress;
 
@@ -2009,18 +2646,76 @@ export class TitanicEngine {
     this.shipX += fwdX * worldSpeed * dt;
     this.shipZ += fwdZ * worldSpeed * dt;
 
-    // =========================================================================
-    // STAGE 1 (0.00 -> 0.40): Intact hull plunges bow-first while stern rises
-    // STAGE 2 (0.40): Hull snaps in two at BREAK_Z = 90 between Funnels #3 & #4
-    // STAGE 3 (0.40 -> 0.72): Bow section dives deep; Stern slams back & floods
-    // STAGE 4 (0.72 -> 1.00): Stern rears ~83 deg vertical & sinks completely
-    // =========================================================================
-    if (p < 0.4) {
-      const s1 = p / 0.4;
-      const e1 = s1 * s1 * (3 - 2 * s1);
-      this.sinkPitch = MathUtils.lerp(-0.088, -0.34, e1);
-      this.sinkDropY = MathUtils.lerp(-2.2, -26.5, Math.pow(s1, 1.15));
-      this.sinkList = this.listDirection * (0.095 + e1 * 0.065);
+    if (vessel === 'britannic') {
+      // =======================================================================
+      // HMHS BRITANNIC: INTACT HULL — DRAMATIC STARBOARD CAPSIZE (~86 DEG)
+      // =======================================================================
+      this.hasBrokenInTwo = false;
+      this.ship.setBreakupVisual(false, 0);
+
+      if (p < 0.30) {
+        const s1 = p / 0.30;
+        const e1 = s1 * s1 * (3 - 2 * s1);
+        this.sinkPitch = MathUtils.lerp(-0.088, -0.20, e1);
+        this.sinkDropY = MathUtils.lerp(-2.2, -9.5, e1);
+        this.sinkList = MathUtils.lerp(0.095, 0.42, e1);
+      } else if (p < 0.68) {
+        const s2 = (p - 0.30) / 0.38;
+        const e2 = s2 * s2 * (3 - 2 * s2);
+        this.sinkPitch = MathUtils.lerp(-0.20, -0.36, e2);
+        this.sinkDropY = MathUtils.lerp(-9.5, -22.5, e2);
+        this.sinkList = MathUtils.lerp(0.42, 1.40, e2);
+        if (p > 0.34 && !this.autoFocusedBreakup) {
+          this.autoFocusedBreakup = true;
+          this.eventText = 'HMHS BRITANNIC CAPSIZING ONTO HER STARBOARD BEAM — PORT PROPELLERS EXPOSED';
+          this.eventTimer = 5.5;
+          this.sound.playHullGroan(1.0);
+        }
+      } else {
+        const s3 = (p - 0.68) / 0.32;
+        const e3 = Math.pow(s3, 1.15);
+        this.sinkPitch = MathUtils.lerp(-0.36, -0.48, e3);
+        this.sinkDropY = MathUtils.lerp(-22.5, -58.0, e3);
+        this.sinkList = MathUtils.lerp(1.40, 1.52, e3);
+      }
+
+      const hingeY = this.sinkDropY - this.activeBreakZ * Math.sin(this.sinkPitch);
+      this.ship.bowGroup.position.y = hingeY;
+      this.ship.bowGroup.rotation.x = this.sinkPitch;
+      this.ship.sternGroup.position.y = hingeY;
+      this.ship.sternGroup.rotation.x = this.sinkPitch;
+    } else if (vessel === 'concordia') {
+      // =======================================================================
+      // COSTA CONCORDIA: INTACT STARBOARD CAPSIZE (~68 DEG) HALF-SUBMERGED ON REEF SHELF
+      // =======================================================================
+      this.hasBrokenInTwo = false;
+      this.ship.setBreakupVisual(false, 0);
+
+      if (p < 0.35) {
+        const s1 = p / 0.35;
+        const e1 = s1 * s1 * (3 - 2 * s1);
+        this.sinkPitch = MathUtils.lerp(-0.04, -0.065, e1);
+        this.sinkDropY = MathUtils.lerp(-2.2, -5.0, e1);
+        this.sinkList = MathUtils.lerp(0.095, 0.45, e1);
+      } else if (p < 0.78) {
+        const s2 = (p - 0.35) / 0.43;
+        const e2 = s2 * s2 * (3 - 2 * s2);
+        this.sinkPitch = MathUtils.lerp(-0.065, -0.055, e2);
+        this.sinkDropY = MathUtils.lerp(-5.0, -8.2, e2);
+        this.sinkList = MathUtils.lerp(0.45, 1.12, e2);
+        if (p > 0.38 && !this.autoFocusedBreakup) {
+          this.autoFocusedBreakup = true;
+          this.eventText = 'COSTA CONCORDIA GROUNDED — LISTING 68° ONTO STARBOARD REEF SHELF';
+          this.eventTimer = 5.5;
+          this.sound.playHullGroan(0.95);
+        }
+      } else {
+        const s3 = (p - 0.78) / 0.22;
+        const e3 = s3 * s3 * (3 - 2 * s3);
+        this.sinkPitch = -0.055;
+        this.sinkDropY = MathUtils.lerp(-8.2, -8.8, e3);
+        this.sinkList = MathUtils.lerp(1.12, 1.18, e3);
+      }
 
       const hingeY = this.sinkDropY - this.activeBreakZ * Math.sin(this.sinkPitch);
       this.ship.bowGroup.position.y = hingeY;
@@ -2028,77 +2723,94 @@ export class TitanicEngine {
       this.ship.sternGroup.position.y = hingeY;
       this.ship.sternGroup.rotation.x = this.sinkPitch;
     } else {
-      if (!this.hasBrokenInTwo) {
-        this.hasBrokenInTwo = true;
-        this.ship.setBreakupVisual(true, 1.35);
-        this.sound.playBreakupSnap();
-        this.shakeIntensity = 1.0;
-        const shortName = VESSEL_SPECS[this.selectedVessel].shortName.toUpperCase();
-        this.eventText = `HULL FRACTURING AT MIDSHIPS — ${shortName} BREAKS IN TWO`;
-        this.eventTimer = 5.0;
+      // =======================================================================
+      // RMS TITANIC: MIDSHIPS BREAKUP AT BREAK_Z = 90 -> VERTICAL STERN PLUNGE
+      // =======================================================================
+      if (p < 0.4) {
+        const s1 = p / 0.4;
+        const e1 = s1 * s1 * (3 - 2 * s1);
+        this.sinkPitch = MathUtils.lerp(-0.088, -0.34, e1);
+        this.sinkDropY = MathUtils.lerp(-2.2, -26.5, Math.pow(s1, 1.15));
+        this.sinkList = this.listDirection * (0.095 + e1 * 0.065);
 
-        // Explosive burst of steam, sparks & torn spray at the fracture plane (z = activeBreakZ)
-        const breakWorldX = this.shipX - fwdX * this.activeBreakZ;
-        const breakWorldZ = this.shipZ - fwdZ * this.activeBreakZ;
-        for (let i = 0; i < 42; i++) {
-          const isSpark = i < 14;
-          this.particles.emit(
-            breakWorldX + (Math.random() - 0.5) * 18,
-            4.5 + Math.random() * 14,
-            breakWorldZ + (Math.random() - 0.5) * 18,
-            (Math.random() - 0.5) * 12,
-            4.0 + Math.random() * 10,
-            (Math.random() - 0.5) * 12,
-            isSpark ? 0.42 : 1.4 + Math.random() * 1.5,
-            isSpark ? 0.65 : 1.5 + Math.random() * 0.9,
-            isSpark ? 14.0 : 4.2,
-            isSpark ? 0xffb347 : 0xdbeafe,
-          );
-        }
-
-        const inCockpit = VESSEL_SPOTS[this.focusSpotIndex].id === 'wheelhouse';
-        if (!inCockpit && !this.userAdjustedCameraInSink && !this.autoFocusedBreakup) {
-          this.autoFocusedBreakup = true;
-          this.focusVesselSpot('funnels', false);
-        }
-      }
-
-      const breakHingeY = -26.5 - this.activeBreakZ * Math.sin(-0.34);
-
-      // 1) Forward Bow Section breaks free & plunges deep into the abyss (0.40 -> 0.74)
-      const bowT = MathUtils.clamp((p - 0.4) / 0.34, 0, 1);
-      const eBow = bowT * bowT * (3 - 2 * bowT);
-      this.ship.bowGroup.rotation.x = MathUtils.lerp(-0.34, -0.78, eBow);
-      this.ship.bowGroup.position.y = MathUtils.lerp(breakHingeY, -76.0, Math.pow(bowT, 1.18));
-
-      // 2) Stern Section violently slams back down (0.40 -> 0.55), then tilts vertical & plunges completely (0.55 -> 1.00)
-      if (p < 0.55) {
-        const settleT = (p - 0.4) / 0.15;
-        const eSettle = Math.sin(settleT * Math.PI * 0.5);
-        this.ship.sternGroup.rotation.x = MathUtils.lerp(-0.34, -0.05, eSettle);
-        this.ship.sternGroup.position.y = MathUtils.lerp(breakHingeY, -3.2, eSettle);
-        this.sinkList = this.listDirection * MathUtils.lerp(0.16, 0.08, eSettle);
-      } else if (p < 0.78) {
-        const tiltT = (p - 0.55) / 0.23;
-        const eTilt = tiltT * tiltT * (3 - 2 * tiltT);
-        this.ship.sternGroup.rotation.x = MathUtils.lerp(-0.05, -1.38, eTilt);
-        this.ship.sternGroup.position.y = MathUtils.lerp(-3.2, -56.0, eTilt);
-        this.sinkList = this.listDirection * MathUtils.lerp(0.08, 0.03, eTilt);
-
-        if (p > 0.68 && this.eventTimer <= 0.5) {
-          this.eventText = 'STERN RISING VERTICAL — FINAL PLUNGE';
-          this.eventTimer = 4.0;
-        }
+        const hingeY = this.sinkDropY - this.activeBreakZ * Math.sin(this.sinkPitch);
+        this.ship.bowGroup.position.y = hingeY;
+        this.ship.bowGroup.rotation.x = this.sinkPitch;
+        this.ship.sternGroup.position.y = hingeY;
+        this.ship.sternGroup.rotation.x = this.sinkPitch;
       } else {
-        const plungeT = (p - 0.78) / 0.22;
-        this.ship.sternGroup.rotation.x = MathUtils.lerp(-1.38, -1.46, plungeT);
-        this.ship.sternGroup.position.y = MathUtils.lerp(-56.0, -138.0, Math.pow(plungeT, 1.12));
-        this.sinkList = this.listDirection * MathUtils.lerp(0.03, 0.0, plungeT);
-      }
+        if (!this.hasBrokenInTwo) {
+          this.hasBrokenInTwo = true;
+          this.ship.setBreakupVisual(true, 1.35);
+          this.sound.playBreakupSnap();
+          this.shakeIntensity = 1.0;
+          const shortName = VESSEL_SPECS[this.selectedVessel].shortName.toUpperCase();
+          this.eventText = `HULL FRACTURING AT MIDSHIPS — ${shortName} BREAKS IN TWO`;
+          this.eventTimer = 5.0;
 
-      // Interior break-cap embers dim as water floods the open bulkheads
-      const emberFade = Math.max(0, 1 - (p - 0.4) / 0.16);
-      this.ship.setBreakupVisual(true, emberFade * 1.35);
+          // Explosive burst of steam, sparks & torn spray at the fracture plane (z = activeBreakZ)
+          const breakWorldX = this.shipX - fwdX * this.activeBreakZ;
+          const breakWorldZ = this.shipZ - fwdZ * this.activeBreakZ;
+          for (let i = 0; i < 42; i++) {
+            const isSpark = i < 14;
+            this.particles.emit(
+              breakWorldX + (Math.random() - 0.5) * 18,
+              4.5 + Math.random() * 14,
+              breakWorldZ + (Math.random() - 0.5) * 18,
+              (Math.random() - 0.5) * 12,
+              4.0 + Math.random() * 10,
+              (Math.random() - 0.5) * 12,
+              isSpark ? 0.42 : 1.4 + Math.random() * 1.5,
+              isSpark ? 0.65 : 1.5 + Math.random() * 0.9,
+              isSpark ? 14.0 : 4.2,
+              isSpark ? 0xffb347 : 0xdbeafe,
+            );
+          }
+
+          const inCockpit = VESSEL_SPOTS[this.focusSpotIndex].id === 'wheelhouse';
+          if (!inCockpit && !this.userAdjustedCameraInSink && !this.autoFocusedBreakup) {
+            this.autoFocusedBreakup = true;
+            this.focusVesselSpot('funnels', false);
+          }
+        }
+
+        const breakHingeY = -26.5 - this.activeBreakZ * Math.sin(-0.34);
+
+        // 1) Forward Bow Section breaks free & plunges deep into the abyss (0.40 -> 0.74)
+        const bowT = MathUtils.clamp((p - 0.4) / 0.34, 0, 1);
+        const eBow = bowT * bowT * (3 - 2 * bowT);
+        this.ship.bowGroup.rotation.x = MathUtils.lerp(-0.34, -0.78, eBow);
+        this.ship.bowGroup.position.y = MathUtils.lerp(breakHingeY, -76.0, Math.pow(bowT, 1.18));
+
+        // 2) Stern Section violently slams back down (0.40 -> 0.55), then tilts vertical & plunges completely (0.55 -> 1.00)
+        if (p < 0.55) {
+          const settleT = (p - 0.4) / 0.15;
+          const eSettle = Math.sin(settleT * Math.PI * 0.5);
+          this.ship.sternGroup.rotation.x = MathUtils.lerp(-0.34, -0.05, eSettle);
+          this.ship.sternGroup.position.y = MathUtils.lerp(breakHingeY, -3.2, eSettle);
+          this.sinkList = this.listDirection * MathUtils.lerp(0.16, 0.08, eSettle);
+        } else if (p < 0.78) {
+          const tiltT = (p - 0.55) / 0.23;
+          const eTilt = tiltT * tiltT * (3 - 2 * tiltT);
+          this.ship.sternGroup.rotation.x = MathUtils.lerp(-0.05, -1.38, eTilt);
+          this.ship.sternGroup.position.y = MathUtils.lerp(-3.2, -56.0, eTilt);
+          this.sinkList = this.listDirection * MathUtils.lerp(0.08, 0.03, eTilt);
+
+          if (p > 0.68 && this.eventTimer <= 0.5) {
+            this.eventText = 'STERN RISING VERTICAL — FINAL PLUNGE';
+            this.eventTimer = 4.0;
+          }
+        } else {
+          const plungeT = (p - 0.78) / 0.22;
+          this.ship.sternGroup.rotation.x = MathUtils.lerp(-1.38, -1.46, plungeT);
+          this.ship.sternGroup.position.y = MathUtils.lerp(-56.0, -138.0, Math.pow(plungeT, 1.12));
+          this.sinkList = this.listDirection * MathUtils.lerp(0.03, 0.0, plungeT);
+        }
+
+        // Interior break-cap embers dim as water floods the open bulkheads
+        const emberFade = Math.max(0, 1 - (p - 0.4) / 0.16);
+        this.ship.setBreakupVisual(true, emberFade * 1.35);
+      }
     }
 
     // Rising cold Atlantic floodwater inside the wheelhouse
@@ -2167,7 +2879,21 @@ export class TitanicEngine {
       this.focusVesselSpot('funnels', false);
     }
 
-    this.manageIcebergField(dt, worldSpeed, fwdX, fwdZ);
+    if (this.selectedVessel === 'titanic') {
+      this.manageIcebergField(dt, worldSpeed, fwdX, fwdZ);
+    } else if (this.selectedVessel === 'britannic') {
+      this.submarineCombat.update(
+        dt,
+        this.simTime,
+        this.shipX,
+        this.shipZ,
+        this.headingRad,
+        this.speedKnots,
+        1.0,
+        this.activeHullCheckPoints,
+        false,
+      );
+    }
     this.checkAuxVesselCollisions(dt);
     this.applyAtmosphere(1.0);
     this.oceanAndSky.update(
@@ -2264,7 +2990,10 @@ export class TitanicEngine {
         if (!this.carpathiaWhistlePlayed) {
           this.carpathiaWhistlePlayed = true;
           this.sound.playCarpathiaWhistle();
-          this.eventText = 'RMS CARPATHIA SIGHTED THROUGH THE ICE FIELD';
+          this.eventText =
+            this.selectedVessel === 'titanic'
+              ? 'RMS CARPATHIA SIGHTED THROUGH THE ICE FIELD'
+              : 'RMS CARPATHIA SIGHTED ON THE HORIZON';
           this.eventTimer = 5.5;
           const wx = this.shipX + rightX * carpLocalX + fwdX * -carpLocalZ;
           const wz = this.shipZ + rightZ * carpLocalX + fwdZ * -carpLocalZ;
@@ -2419,7 +3148,7 @@ export class TitanicEngine {
   }
 
   private stepAftermathSequence(dt: number): void {
-    this.ship.hullMeshGroup.visible = false;
+    this.ship.hullMeshGroup.visible = this.selectedVessel === 'concordia';
     this.speedKnots = MathUtils.damp(this.speedKnots, 0, 1.5, dt);
 
     const fwdX = Math.sin(this.headingRad);
@@ -2427,7 +3156,7 @@ export class TitanicEngine {
     const rightX = Math.cos(this.headingRad);
     const rightZ = Math.sin(this.headingRad);
 
-    // Gentle residual bubbles over Titanic's resting spot for the first 35 seconds
+    // Gentle residual bubbles over resting wreck for the first 35 seconds
     if (this.aftermathSeconds < 35 && Math.random() < 0.38) {
       const along = -95 - Math.random() * 85;
       const sideOff = (Math.random() - 0.5) * 26;
@@ -2446,7 +3175,21 @@ export class TitanicEngine {
     }
 
     this.advanceRescueSimulation(dt);
-    this.manageIcebergField(dt, 0, fwdX, fwdZ);
+    if (this.selectedVessel === 'titanic') {
+      this.manageIcebergField(dt, 0, fwdX, fwdZ);
+    } else if (this.selectedVessel === 'britannic') {
+      this.submarineCombat.update(
+        dt,
+        this.simTime,
+        this.shipX,
+        this.shipZ,
+        this.headingRad,
+        0,
+        1.0,
+        this.activeHullCheckPoints,
+        false,
+      );
+    }
     this.checkAuxVesselCollisions(dt);
     this.applyAtmosphere(1.0, this.rescueDawnMix);
     this.oceanAndSky.update(
@@ -2459,6 +3202,9 @@ export class TitanicEngine {
       0.0,
       0.0,
     );
+    if (this.playerOverboard) {
+      this.stepInteriorWalk(dt);
+    }
     this.particles.update(dt);
     this.updateCamera(dt);
     this.syncUnderwaterCameraEffects(1.0, dt);
@@ -2987,6 +3733,9 @@ export class TitanicEngine {
             if (obs.kind === 'tug' || obs.kind === 'pilot' || obs.kind === 'lifeboat') {
               this.harbor.triggerEscortStrike(obs.id);
               this.processHarborBreakEvents();
+              this.gtaSandbox.addHeat(1, `STRUCK ${obs.label}`);
+            } else if (obs.kind === 'buoy') {
+              this.gtaSandbox.addHeat(1, 'DAMAGED NAVIGATION BUOY');
             }
             const nx = dist > 0.001 ? vx / dist : -rightX;
             const nz = dist > 0.001 ? vz / dist : -rightZ;
@@ -3214,10 +3963,13 @@ export class TitanicEngine {
           berg.nearMissAwarded = true;
           const pts = 250 * this.combo;
           this.score += pts;
+          this.gtaSandbox.cash += 150;
+          this.gtaSandbox.rep += 45;
+          this.gtaSandbox.advanceDaredevilMission();
           this.nearMissCount += 1;
           this.combo = Math.min(5, this.combo + 1);
           this.sound.playNearMissChime();
-          this.eventText = `CLEAN PASSAGE +${pts}`;
+          this.eventText = `CLEAN PASSAGE +${pts} (+$150)`;
           this.eventTimer = 1.9;
           this.emitTelemetry();
         }
@@ -3232,7 +3984,7 @@ export class TitanicEngine {
   // CAMERA RIG (Title Harbor Sweep + Free 360° Orbit + Wheelhouse & Interior Decks)
   // =========================================================================
   private updateTitleCamera(): void {
-    // Graceful sunlit harbor vista from port-bow channel water framing Titanic, Britannic & Lusitania
+    // Graceful sunlit harbor vista from port-bow channel water framing Titanic, Britannic & Costa Concordia
     const drift = Math.sin(this.simTime * 0.18);
     const camX = this.shipX * 0.65 - 110 + drift * 16;
     const camY = 33.5 + Math.cos(this.simTime * 0.24) * 2.2;
@@ -3246,16 +3998,36 @@ export class TitanicEngine {
   }
 
   private updateCamera(dt: number): void {
+    if (this.phase === 'playing' && this.gtaSandbox.activeCraft === 'speedboat') {
+      this.orbitYaw = MathUtils.damp(this.orbitYaw, this.targetOrbitYaw, 7, dt);
+      this.orbitPitch = MathUtils.damp(this.orbitPitch, this.targetOrbitPitch, 7, dt);
+      this.orbitDistance = MathUtils.damp(this.orbitDistance, Math.max(12, this.targetOrbitDistance), 7, dt);
+      const sbYaw = this.gtaSandbox.speedboatHeading + this.orbitYaw;
+      const dist = this.orbitDistance;
+      const camX = this.gtaSandbox.speedboatX - Math.sin(sbYaw) * Math.cos(this.orbitPitch) * dist;
+      const camZ = this.gtaSandbox.speedboatZ + Math.cos(sbYaw) * Math.cos(this.orbitPitch) * dist;
+      const camY = Math.max(1.6, this.gtaSandbox.speedboatY + 2.4 + Math.sin(this.orbitPitch) * dist);
+      this.camera.position.set(camX, camY, camZ);
+      this.camera.up.set(0, 1, 0);
+      _vCamTarget.set(
+        this.gtaSandbox.speedboatX + Math.sin(this.gtaSandbox.speedboatHeading) * 14,
+        this.gtaSandbox.speedboatY + 1.8,
+        this.gtaSandbox.speedboatZ - Math.cos(this.gtaSandbox.speedboatHeading) * 14,
+      );
+      this.camera.lookAt(_vCamTarget);
+      return;
+    }
+
     const spec = getVesselSpotSpec(this.selectedVessel, VESSEL_SPOTS[this.focusSpotIndex].id);
     const vSpec = VESSEL_SPECS[this.selectedVessel];
     const targetX = spec.localTarget[0] + this.interiorWalkOffset.x;
-    const targetY = spec.localTarget[1] + this.interiorWalkOffset.y;
+    const targetY = spec.localTarget[1] + this.interiorWalkOffset.y + this.playerJumpOffsetY;
     const targetZ = spec.localTarget[2] + this.interiorWalkOffset.z;
 
     // Smoothly damp focus position & spherical orbit coordinates
-    this.camFocusLocal.x = MathUtils.damp(this.camFocusLocal.x, targetX, 7, dt);
-    this.camFocusLocal.y = MathUtils.damp(this.camFocusLocal.y, targetY, 7, dt);
-    this.camFocusLocal.z = MathUtils.damp(this.camFocusLocal.z, targetZ, 7, dt);
+    this.camFocusLocal.x = MathUtils.damp(this.camFocusLocal.x, targetX, 12, dt);
+    this.camFocusLocal.y = MathUtils.damp(this.camFocusLocal.y, targetY, 18, dt);
+    this.camFocusLocal.z = MathUtils.damp(this.camFocusLocal.z, targetZ, 12, dt);
     this.orbitYaw = MathUtils.damp(this.orbitYaw, this.targetOrbitYaw, 7, dt);
     this.orbitPitch = MathUtils.damp(this.orbitPitch, this.targetOrbitPitch, 7, dt);
     this.orbitDistance = MathUtils.damp(this.orbitDistance, this.targetOrbitDistance, 7, dt);
@@ -3306,7 +4078,9 @@ export class TitanicEngine {
     _vFwd.set(Math.sin(this.headingRad), 0, -Math.cos(this.headingRad));
     _vRight.set(Math.cos(this.headingRad), 0, Math.sin(this.headingRad));
 
-    if (
+    if (this.playerOverboard) {
+      _vFocusWorld.copy(this.overboardPos);
+    } else if (
       (this.phase === 'aftermath' || this.phase === 'gameover') &&
       this.aftermathFocus === 'carpathia' &&
       this.carpathia.root.visible
@@ -3333,15 +4107,20 @@ export class TitanicEngine {
     _vCamPos.copy(_vFocusWorld);
     _vCamPos.addScaledVector(_vLookDir, -this.orbitDistance);
 
-    // Keep exterior cruising/aftermath camera above waves, while allowing cockpit, interior decks & sinking spots underwater
+    // Keep deck camera above waves unless interior, sinking, overboard, or intentionally orbiting down beneath the water
     const isInterior =
-      (spec.id === 'wheelhouse' || spec.category === 'interior') && this.orbitDistance < 12;
+      (spec.id === 'wheelhouse' || spec.category === 'interior') && this.orbitDistance < 12 && !this.playerOverboard;
     const allowUnderwater =
       isInterior ||
-      (this.phase === 'sinking' && !isOverviewShip);
-    if (!allowUnderwater && this.orbitDistance > 1.5 && _vCamPos.y < 1.25) {
+      this.playerOverboard ||
+      this.playerLeftDeck ||
+      (this.phase === 'sinking' && !isOverviewShip) ||
+      (this.orbitDistance > 3.0 && this.orbitPitch < -0.06);
+    if (allowUnderwater) {
+      if (!isInterior && _vCamPos.y < -24.0) _vCamPos.y = -24.0;
+    } else if (this.orbitDistance > 1.5 && _vCamPos.y < 1.25) {
       _vCamPos.y = 1.25;
-    } else if (!allowUnderwater && this.orbitDistance <= 1.5 && _vCamPos.y < 0.85) {
+    } else if (this.orbitDistance <= 1.5 && _vCamPos.y < 0.85) {
       _vCamPos.y = 0.85;
     }
 
@@ -3356,14 +4135,14 @@ export class TitanicEngine {
       _vCamPos.z += (Math.random() - 0.5) * s;
     }
 
-    // Subtle on-foot camera stride bob while walking ship decks
-    if (this.isWalkingOnFoot && this.orbitDistance < 2.0 && dt > 0) {
+    // Subtle on-foot camera stride bob while walking grounded ship decks
+    if (this.isWalkingOnFoot && this.playerIsGrounded && !this.playerOverboard && this.orbitDistance < 2.0 && dt > 0) {
       this.walkBobPhase += dt * 10.5;
       _vCamPos.y += Math.abs(Math.sin(this.walkBobPhase)) * 0.032;
     }
 
     // Subtle ship roll feel when standing inside wheelhouse or interior decks
-    const rollInfluence = isInterior ? 0.55 : 0.08;
+    const rollInfluence = this.playerOverboard ? 0 : isInterior ? 0.55 : 0.08;
     _mCamRoll.makeRotationAxis(_vLookDir, -(this.rollAngle * rollInfluence));
     this.camera.up.set(0, 1, 0).applyMatrix4(_mCamRoll).normalize();
 
@@ -3438,6 +4217,14 @@ export class TitanicEngine {
       survivorsRescued: this.survivorsRescued,
       boatsRecovered: this.boatsRecovered,
       icebergsInField: this.icebergs.length,
+      threatMode:
+        this.selectedVessel === 'titanic'
+          ? 'icebergs'
+          : this.selectedVessel === 'britannic'
+            ? 'submarines'
+            : 'reefs',
+      submarinesSunk: this.submarinesSunk,
+      activeTorpedoes: this.activeTorpedoes,
       carpathiaSunk: this.carpathiaState.status !== 'intact',
       focusCarpathia: this.aftermathFocus === 'carpathia',
       aftermathFocus: this.aftermathFocus,
@@ -3458,6 +4245,30 @@ export class TitanicEngine {
       isMusicMuted: this.sound.isMusicMuted(),
       voyageTimeSec: Math.floor(this.voyageElapsedSec),
       skyPhaseLabel,
+      playerOverboard: this.playerOverboard,
+      wantedLevel: this.gtaSandbox.wantedLevel,
+      wantedEvading: this.gtaSandbox.wantedEvading,
+      wantedCooldownPct: this.gtaSandbox.wantedCooldownPct,
+      cash: this.gtaSandbox.cash,
+      rep: this.gtaSandbox.rep,
+      specialFocusPct: Math.round(this.gtaSandbox.specialFocusPct),
+      specialFocusActive: this.gtaSandbox.specialFocusActive,
+      activeCraft: this.gtaSandbox.activeCraft,
+      speedboatKnots: Math.round(this.gtaSandbox.speedboatKnots),
+      speedboatNitroPct: Math.round(this.gtaSandbox.speedboatNitroPct),
+      radioStation: this.sound.getRadioStation(),
+      radioStationName: this.sound.getRadioStationName(),
+      activeMissionTitle: this.gtaSandbox.activeMissionTitle,
+      activeMissionStep: this.gtaSandbox.activeMissionStep,
+      activeMissionTimerSec: this.gtaSandbox.activeMissionTimerSec,
+      missionBannerText: this.gtaSandbox.missionBannerText,
+      missionBannerSub: this.gtaSandbox.missionBannerSub,
+      stuntText: this.gtaSandbox.stuntText,
+      radarHeadingRad:
+        this.gtaSandbox.activeCraft === 'speedboat'
+          ? this.gtaSandbox.speedboatHeading
+          : this.headingRad,
+      radarBlips: this.gtaSandbox.getRadarBlips(),
     });
   }
 
@@ -3479,6 +4290,8 @@ export class TitanicEngine {
     this.harbor.dispose();
     this.oceanAndSky.dispose();
     this.iceFactory.dispose();
+    this.submarineCombat.dispose();
+    this.gtaSandbox.dispose();
     this.particles.dispose();
     this.textures.dispose();
     this.envRig.dispose();

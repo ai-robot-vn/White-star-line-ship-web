@@ -1,4 +1,4 @@
-export type VesselId = 'titanic' | 'britannic' | 'lusitania';
+export type VesselId = 'titanic' | 'britannic' | 'concordia';
 
 export interface VesselSpec {
   id: VesselId;
@@ -22,7 +22,7 @@ export interface VesselSpec {
   specSummary: string;
 }
 
-export const VESSEL_ORDER: VesselId[] = ['titanic', 'britannic', 'lusitania'];
+export const VESSEL_ORDER: VesselId[] = ['titanic', 'britannic', 'concordia'];
 
 export const VESSEL_SPECS: Record<VesselId, VesselSpec> = {
   titanic: {
@@ -44,7 +44,7 @@ export const VESSEL_SPECS: Record<VesselId, VesselSpec> = {
     turnMultiplier: 1.0,
     hullResilience: 1.0,
     telegraphBrand: 'WHITE STAR',
-    specSummary: 'White Star Flagship · 269.1m · 30 KTS Flank · Balanced Helm',
+    specSummary: 'White Star Flagship · 269.1m · Iceberg Alley · Balanced Helm',
   },
   britannic: {
     id: 'britannic',
@@ -65,28 +65,28 @@ export const VESSEL_SPECS: Record<VesselId, VesselSpec> = {
     turnMultiplier: 0.96,
     hullResilience: 1.25,
     telegraphBrand: 'WHITE STAR',
-    specSummary: 'Hospital Ship · 269.1m · Arched Gantry Davits · +25% Reinforced Hull',
+    specSummary: 'Hospital Ship · 269.1m · U-Boat Patrol · +25% Reinforced Hull',
   },
-  lusitania: {
-    id: 'lusitania',
-    name: 'RMS Lusitania',
-    shortName: 'Lusitania',
-    line: 'Cunard Line',
+  concordia: {
+    id: 'concordia',
+    name: 'Costa Concordia',
+    shortName: 'Concordia',
+    line: 'Costa Crociere',
     berthLabel: 'Berth 38',
-    berthX: -215,
+    berthX: -219.5,
     berthZ: 0,
-    lengthM: 239.8,
-    beamM: 26.8,
-    halfBeam: 13.4,
-    bowZ: -66.0,
-    sternZ: 173.8,
-    breakZ: 78.0,
-    fullKnots: 25,
-    flankKnots: 32,
-    turnMultiplier: 1.18,
-    hullResilience: 0.94,
-    telegraphBrand: 'CUNARD LINE',
-    specSummary: 'Cunard Greyhound · 239.8m · 32 KTS Flank · +18% Agile Helm',
+    lengthM: 290.2,
+    beamM: 35.5,
+    halfBeam: 17.75,
+    bowZ: -80.0,
+    sternZ: 210.2,
+    breakZ: 98.0,
+    fullKnots: 20,
+    flankKnots: 26,
+    turnMultiplier: 1.24,
+    hullResilience: 1.08,
+    telegraphBrand: 'COSTA CROCIERE',
+    specSummary: 'Mega Cruise Liner · 290.2m · Twin Azipods · Granite Reefs · +24% Helm',
   },
 };
 
@@ -265,57 +265,76 @@ export const VESSEL_SPOTS: VesselSpotSpec[] = [
   },
 ];
 
-const LUSITANIA_SPOT_OVERRIDES: Partial<Record<VesselSpotId, Partial<VesselSpotSpec>>> = {
+const CONCORDIA_SPOT_OVERRIDES: Partial<Record<VesselSpotId, Partial<VesselSpotSpec>>> = {
+  wheelhouse: {
+    label: 'Panoramic Bridge & Wings',
+    localTarget: [0, 28.25, -0.45],
+    walkBounds: { minX: -18.5, maxX: 18.5, minZ: -1.4, maxZ: 2.2 },
+  },
   bow: {
-    localTarget: [0, 10.8, -50],
-    walkBounds: { minX: -5.8, maxX: 5.8, minZ: -61, maxZ: -31 },
+    label: 'Foredeck & Bulbous Bow',
+    localTarget: [0, 12.2, -56],
+    walkBounds: { minX: -6.5, maxX: 6.5, minZ: -74, maxZ: -20 },
   },
   crowsNest: {
-    localTarget: [0, 26.2, -19.5],
+    label: 'Radar Mast & Satcom',
+    shortLabel: 'RADAR',
+    localTarget: [0, 39.5, 5.8],
+    defaultDistance: 24,
   },
   lifeboats: {
-    localTarget: [11.8, 13.8, 24],
-    walkBounds: { minX: -11.6, maxX: 11.6, minZ: 4, maxZ: 74 },
+    label: 'Deck 4 SOLAS Boats',
+    localTarget: [16.4, 12.8, 36],
+    defaultDistance: 44,
+    walkBounds: { minX: -16.2, maxX: 16.2, minZ: 12, maxZ: 96 },
   },
   funnels: {
-    label: 'Full 240m Ship & Funnels',
-    localTarget: [0, 18.8, 52],
-    defaultDistance: 128,
+    label: 'Full 290m Ship & Costa Funnel',
+    localTarget: [0, 22.0, 68],
+    defaultDistance: 152,
   },
   stern: {
-    localTarget: [0, 9.6, 158],
-    walkBounds: { minX: -7.0, maxX: 7.0, minZ: 148, maxZ: 170 },
+    label: 'Aft Lido Terraces & Azipods',
+    localTarget: [0, 17.6, 188],
+    defaultDistance: 52,
+    walkBounds: { minX: -10.5, maxX: 10.5, minZ: 176, maxZ: 204 },
   },
   staircase: {
-    localTarget: [0, 11.4, 30.2],
-    walkBounds: { minX: -4.4, maxX: 4.4, minZ: 23.4, maxZ: 32.0 },
+    label: 'Europa Grand Atrium',
+    shortLabel: 'ATRIUM',
+    localTarget: [0, 15.2, 42.0],
+    walkBounds: { minX: -6.5, maxX: 6.5, minZ: 33.5, maxZ: 50.5 },
   },
   marconi: {
-    label: 'Marconi Wireless Cabin',
-    localTarget: [0, 14.2, 41.4],
-    walkBounds: { minX: -4.2, maxX: 4.2, minZ: 36.4, maxZ: 44.2 },
+    label: 'GMDSS Radio & Radar Room',
+    shortLabel: 'GMDSS',
+    localTarget: [0, 28.1, 6.2],
+    walkBounds: { minX: -4.8, maxX: 4.8, minZ: 3.6, maxZ: 8.8 },
   },
   lounge: {
-    label: 'A-Deck Lounge & Promenade',
-    localTarget: [0, 11.35, 64.0],
-    walkBounds: { minX: -11.5, maxX: 11.5, minZ: 55.8, maxZ: 71.2 },
+    label: 'Lido Magrodome Pool Deck',
+    shortLabel: 'LIDO',
+    localTarget: [0, 25.4, 72.0],
+    walkBounds: { minX: -12.5, maxX: 12.5, minZ: 56.5, maxZ: 87.5 },
   },
   dining: {
-    label: 'D-Deck Saloon Dining',
-    localTarget: [0, 4.15, 47.0],
-    walkBounds: { minX: -9.8, maxX: 9.8, minZ: 36.0, maxZ: 58.0 },
+    label: 'Ristorante Milano Dining',
+    shortLabel: 'DINING',
+    localTarget: [0, 6.4, 58.0],
+    walkBounds: { minX: -12.4, maxX: 12.4, minZ: 43.0, maxZ: 73.0 },
   },
   engine: {
-    label: 'Parsons Steam Turbine Room',
-    localTarget: [0, 2.2, 94.0],
-    walkBounds: { minX: -8.0, maxX: 8.0, minZ: 82.0, maxZ: 106.0 },
+    label: 'Diesel-Electric Wärtsilä Room',
+    shortLabel: 'DIESEL',
+    localTarget: [0, 2.2, 122.0],
+    walkBounds: { minX: -9.8, maxX: 9.8, minZ: 109.5, maxZ: 134.5 },
   },
 };
 
 export function getVesselSpotSpec(vesselId: VesselId, spotId: VesselSpotId): VesselSpotSpec {
   const base = VESSEL_SPOTS.find((s) => s.id === spotId) ?? VESSEL_SPOTS[0];
-  if (vesselId !== 'lusitania') return base;
-  const ov = LUSITANIA_SPOT_OVERRIDES[spotId];
+  if (vesselId !== 'concordia') return base;
+  const ov = CONCORDIA_SPOT_OVERRIDES[spotId];
   if (!ov) return base;
   return {
     ...base,
@@ -324,7 +343,7 @@ export function getVesselSpotSpec(vesselId: VesselId, spotId: VesselSpotId): Ves
 }
 
 export function getVesselSpots(vesselId: VesselId): VesselSpotSpec[] {
-  if (vesselId !== 'lusitania') return VESSEL_SPOTS;
+  if (vesselId !== 'concordia') return VESSEL_SPOTS;
   return VESSEL_SPOTS.map((s) => getVesselSpotSpec(vesselId, s.id));
 }
 
@@ -358,6 +377,15 @@ export function getEffectiveTelegraphKnots(vesselId: VesselId, telegraphIndex: n
 export type IcebergVariant = 'growler' | 'tabular' | 'pinnacle';
 export type CarpathiaStage = 'waiting' | 'approaching' | 'boarding' | 'complete';
 export type AftermathFocusTarget = 'lifeboats' | 'carpathia';
+
+export type CraftMode = 'ship' | 'speedboat';
+export type RadioStationId = 'oceanfm' | 'leonida' | 'lounge' | 'off';
+
+export interface RadarBlip {
+  dx: number; // relative to player world X (meters)
+  dz: number; // relative to player world Z (meters)
+  kind: 'hazard' | 'police' | 'chopper' | 'mission' | 'speedboat' | 'ship' | 'sub';
+}
 
 export interface TelemetrySnapshot {
   vesselId: VesselId;
@@ -400,6 +428,9 @@ export interface TelemetrySnapshot {
   searchlightCooldownPct: number; // 0 = ready, 1 = cooling
   icebergWarning: string | null;
   icebergsInField: number;
+  threatMode: 'icebergs' | 'submarines' | 'reefs';
+  submarinesSunk: number;
+  activeTorpedoes: number;
   lastEventText: string | null;
   autopilotEnabled: boolean;
   bowPanicActive: boolean;
@@ -408,6 +439,28 @@ export interface TelemetrySnapshot {
   isMusicMuted: boolean;
   voyageTimeSec: number;
   skyPhaseLabel: string;
+  playerOverboard: boolean;
+  // GTA 6 Sandbox & Open-World Systems
+  wantedLevel: number; // 0 to 5 stars
+  wantedEvading: boolean;
+  wantedCooldownPct: number; // 0 to 1 evasion progress
+  cash: number;
+  rep: number;
+  specialFocusPct: number; // 0 to 100
+  specialFocusActive: boolean;
+  activeCraft: CraftMode;
+  speedboatKnots: number;
+  speedboatNitroPct: number;
+  radioStation: RadioStationId;
+  radioStationName: string;
+  activeMissionTitle: string | null;
+  activeMissionStep: string | null;
+  activeMissionTimerSec: number | null;
+  missionBannerText: string | null;
+  missionBannerSub: string | null;
+  stuntText: string | null;
+  radarHeadingRad: number;
+  radarBlips: RadarBlip[];
 }
 
 export const DEFAULT_TELEGRAPH_INDEX = 4;

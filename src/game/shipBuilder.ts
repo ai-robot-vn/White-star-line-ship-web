@@ -69,16 +69,23 @@ function sampleHullStation(
   let beam = 14.0;
   let flareFactor = 0.06;
 
-  if (z < -10) {
-    // Forward bow taper (-74 to -10)
-    const t = MathUtils.clamp((z - -74) / 64, 0, 1);
-    beam = 14.0 * Math.pow(Math.sin((t * Math.PI) / 2), 0.78);
-    flareFactor = 0.26 * (1 - t) + 0.05;
-  } else if (z > 136) {
-    // Graceful cruiser stern taper (+136 to +195.1)
+  if (z < -16) {
+    // Full ocean-liner forward entrance (-74 to -16) with smooth rounded cutwater stem
+    const t = MathUtils.clamp((z - -74) / 58, 0, 1);
+    beam = 14.0 * Math.pow(Math.sin((t * Math.PI) / 2), 0.58);
+    flareFactor = 0.24 * (1 - t) + 0.05;
+  } else if (z > 136 && z <= 185) {
+    // Graceful Olympic-class elliptical cruiser stern transition (+136 to +185)
     const t = MathUtils.clamp((195.1 - z) / 59.1, 0, 1);
-    beam = 14.0 * Math.pow(Math.sin((t * Math.PI) / 2), 0.65);
+    beam = 14.0 * Math.pow(Math.sin((t * Math.PI) / 2), 0.5);
     flareFactor = 0.14 * (1 - t) + 0.04;
+  } else if (z > 185) {
+    // Broad rounded elliptical counter stern arc (+185 to +195.1) — zero sharp point
+    const tAnchor = (195.1 - 185.0) / 59.1;
+    const anchorBeam = 14.0 * Math.pow(Math.sin((tAnchor * Math.PI) / 2), 0.5);
+    const u = MathUtils.clamp((z - 185.0) / 10.1, 0, 1);
+    beam = anchorBeam * Math.sqrt(Math.max(0, 1 - u * u));
+    flareFactor = 0.14;
   }
 
   let sheerY = 6.8;
@@ -116,7 +123,7 @@ function sampleKeelY(z: number): number {
       return -6.5 + 2.3 * Math.pow(t, 1.3);
     }
     const u = MathUtils.clamp((z - 185) / 10.1, 0, 1);
-    return -4.2 + 7.6 * Math.pow(u, 0.85);
+    return -4.2 + 8.0 * Math.pow(u, 0.92);
   }
   return -6.5;
 }
@@ -176,7 +183,8 @@ function buildLoftedHullSection(
       widthRatio *= 1.0 - sternU * 0.08 * (1.0 - hullFrac);
     }
 
-    const bowRake = z <= -72.0 ? -(hullFrac * 1.9) : 0;
+    const stemU = MathUtils.clamp((-64.0 - z) / 10.0, 0, 1);
+    const bowRake = -0.45 * stemU * hullFrac;
     const x = side * beam * widthRatio;
     return [x, y, z + bowRake, vCoord * 8.0, hullFrac];
   };
@@ -274,7 +282,8 @@ function buildLoftedWeatherDeck(
     const z = zSamples[zi];
     const { beam, sheerY, flareFactor } = sampleHullStation(z, beamScale);
     const halfW = Math.max(0.05, beam * (1 + flareFactor) + edgeExpand);
-    const bowRake = z <= -72.0 ? -1.9 : 0;
+    const stemU = MathUtils.clamp((-64.0 - z) / 10.0, 0, 1);
+    const bowRake = -0.45 * stemU;
     const zz = z + bowRake;
     const yTop = sheerY + yTopOffset;
     const yBot = yTop - thickness;
@@ -720,6 +729,22 @@ export function buildOlympicShip(
     }),
   );
 
+  // HMHS Britannic hospital ship funnels match the reference photo: continuous warm White Star buff all the way up with only subtle soot weathering on the top exhaust lip
+  const britannicFunnelLipMat = trackMat(
+    makePBR('britannic_sootFunnelLip', {
+      color: 0x6f5c43,
+      albedoTex: textures.buffFunnelAlbedo,
+      bumpTex: textures.buffFunnelNormal,
+      bumpLevel: 0.72,
+      roughnessTex: textures.buffFunnelRoughness,
+      roughness: 0.74,
+      metallic: 0.04,
+      envIntensity: 0.34,
+    }),
+  );
+  const funnelBandMat = isBritannic ? buffFunnelMat : darkIronMat;
+  const funnelLipMat = isBritannic ? britannicFunnelLipMat : darkIronMat;
+
   const pipeLaggingMat = trackMat(
     makePBR('titanic_pipeLagging', {
       color: 0xd9d2c2,
@@ -796,21 +821,21 @@ export function buildOlympicShip(
   // 1. TRUE 269.1m x 28m LOFTED HULL (SPLIT AT BREAK_Z = 90) + RUDDER + PROPS
   // =========================================================================
   const fwdHullZStations = [
-    -74, -72, -68, -63, -57, -50, -42, -35.06, -34.94, -26, -18, -10.06, -9.94, 6, 26, 46, 66, 86, BREAK_Z,
+    -74, -73.7, -73.2, -72.2, -70.5, -68, -64, -58, -51, -43, -35.06, -34.94, -26, -18, -10.06, -9.94, 6, 26, 46, 66, 86, BREAK_Z,
   ];
   const aftHullZStations = [
-    BREAK_Z, 106, 126, 136, 147.94, 148.06, 159, 169.94, 170.06, 179, 187, 192, 195.1,
+    BREAK_Z, 106, 126, 136, 147.94, 148.06, 159, 169.94, 170.06, 178, 184, 188, 191, 193.2, 194.4, 195.1,
   ];
 
   const fwdSheerSegments: { tag: string; zList: number[] }[] = [
-    { tag: 'fc', zList: [-74, -72, -68, -63, -57, -50, -42, -35.06] },
+    { tag: 'fc', zList: [-74, -73.2, -71.5, -68, -63, -57, -50, -42, -35.06] },
     { tag: 'fw', zList: [-34.94, -26, -18, -10.06] },
     { tag: 'fb', zList: [-9.94, 6, 26, 46, 66, 86, BREAK_Z] },
   ];
   const aftSheerSegments: { tag: string; zList: number[] }[] = [
     { tag: 'ab', zList: [BREAK_Z, 106, 126, 136, 147.94] },
     { tag: 'aw', zList: [148.06, 159, 169.94] },
-    { tag: 'ap', zList: [170.06, 179, 187, 192, 195.1] },
+    { tag: 'ap', zList: [170.06, 178, 184, 188.5, 191.5, 193.5, 194.6, 195.1] },
   ];
 
   for (const [label, stations, sheerSegs, targetGrp] of [
@@ -838,10 +863,12 @@ export function buildOlympicShip(
         const strakePts: THREE.Vector3[] = [];
         for (const z of seg.zList) {
           const { beam, sheerY, flareFactor } = sampleHullStation(z, beamScale);
+          const stemU = MathUtils.clamp((-64.0 - z) / 10.0, 0, 1);
+          const bowRakeTop = -0.45 * stemU;
           const xTop = side * (beam * (1 + flareFactor) + 0.025);
-          stripePts.push(new THREE.Vector3(xTop, sheerY - 0.14, z <= -72.0 ? z - 1.75 : z));
+          stripePts.push(new THREE.Vector3(xTop, sheerY - 0.14, z + bowRakeTop));
           const xStrake = side * (beam * (1 + flareFactor * 0.94) + 0.03);
-          strakePts.push(new THREE.Vector3(xStrake, sheerY - 0.62, z <= -72.0 ? z - 1.65 : z));
+          strakePts.push(new THREE.Vector3(xStrake, sheerY - 0.62, z + bowRakeTop * 0.93));
         }
         if (!isBritannic) {
           const stripe = trackMesh(
@@ -914,7 +941,7 @@ export function buildOlympicShip(
   for (let di = 0; di < 6; di++) {
     const bowMark = trackMesh(buildBox(nextId('bowDraft'), 0.22, 0.14, 0.42), bowContent);
     bowMark.material = whitePaintMat;
-    bowMark.position.set(0, -3.6 + di * 0.72, -72.4 - di * 0.24);
+    bowMark.position.set(0, -3.6 + di * 0.72, -73.4 - di * 0.06);
 
     const sternMark = trackMesh(buildBox(nextId('sternDraft'), 0.36, 0.14, 0.42), sternContent);
     sternMark.material = whitePaintMat;
@@ -974,7 +1001,7 @@ export function buildOlympicShip(
   // 2. FORECASTLE, FORWARD WELL DECK, SHELTER DECK, AFT WELL & POOP DECKS
   // =========================================================================
   const forecastleTeak = trackMesh(
-    buildLoftedWeatherDeck('forecastleTeak', [-74, -70, -64, -56, -48, -40, -35.06], 0.05, 0.45, -0.02, beamScale),
+    buildLoftedWeatherDeck('forecastleTeak', [-74, -73.2, -71.5, -68, -64, -56, -48, -40, -35.06], 0.05, 0.45, -0.02, beamScale),
     bowContent,
   );
   forecastleTeak.material = teakDeckMat;
@@ -1056,7 +1083,7 @@ export function buildOlympicShip(
   poopBreak.position.y = 6.35;
 
   const poopDeck = trackMesh(
-    buildLoftedWeatherDeck('poopDeck', [170.06, 175, 181, 187, 192, 195.1], 0.06, 0.44, -0.02, beamScale),
+    buildLoftedWeatherDeck('poopDeck', [170.06, 175, 180, 185, 188.5, 191.2, 193.3, 194.4, 195.1], 0.06, 0.44, -0.02, beamScale),
     sternContent,
   );
   poopDeck.material = teakDeckMat;
@@ -1248,10 +1275,10 @@ export function buildOlympicShip(
   // Historical 3rd centerline bow stemhead hawse chock & cast-iron roller
   const centerHawseChock = trackMesh(buildBox('centerHawseChock', 1.12, 0.52, 0.95), bowContent);
   centerHawseChock.material = darkIronMat;
-  centerHawseChock.position.set(0, 9.42, -72.85);
+  centerHawseChock.position.set(0, 9.42, -73.45);
   const centerHawseRing = trackMesh(buildTorusXY('centerHawseRing', 0.38, 0.11, 8, 16), bowContent);
   centerHawseRing.material = darkIronMat;
-  centerHawseRing.position.set(0, 9.42, -73.32);
+  centerHawseRing.position.set(0, 9.42, -73.92);
 
   // V-shaped curved steel forecastle wave-breakwater ahead of forward hatches
   for (const side of [-1, 1] as const) {
@@ -1451,32 +1478,28 @@ export function buildOlympicShip(
     for (const side of [-1, 1] as const) {
       for (let i = 0; i < zList.length; i++) {
         const z = zList[i];
-        const { beam, sheerY, flareFactor } = sampleHullStation(z);
+        const { beam, sheerY, flareFactor } = sampleHullStation(z, beamScale);
         const rx = side * Math.max(0, beam * (1 + flareFactor) - 0.16);
         const ry = sheerY + 0.06;
+        const stemU = MathUtils.clamp((-64.0 - z) / 10.0, 0, 1);
+        const rz = z - 0.45 * stemU;
         const post = trackMesh(buildCylinder(nextId('rPost'), 0.052, 0.052, 1.08, 8), targetGrp);
         post.material = whitePaintMat;
-        post.position.set(rx, ry + 0.52, z <= -72 ? z - 1.85 : z);
+        post.position.set(rx, ry + 0.52, rz);
         if (i < zList.length - 1) {
           const nz = zList[i + 1];
-          const next = sampleHullStation(nz);
+          const next = sampleHullStation(nz, beamScale);
           const nrx = side * Math.max(0, next.beam * (1 + next.flareFactor) - 0.16);
           const nry = next.sheerY + 0.06;
-          buildRailSegment(
-            targetGrp,
-            rx,
-            ry,
-            z <= -72 ? z - 1.85 : z,
-            nrx,
-            nry,
-            nz <= -72 ? nz - 1.85 : nz,
-          );
+          const nStemU = MathUtils.clamp((-64.0 - nz) / 10.0, 0, 1);
+          const nrz = nz - 0.45 * nStemU;
+          buildRailSegment(targetGrp, rx, ry, rz, nrx, nry, nrz);
         }
       }
     }
   };
-  addHullEdgeRail(bowContent, [-73.8, -66, -58]);
-  addHullEdgeRail(sternContent, [170.5, 178, 185, 191, 194.8]);
+  addHullEdgeRail(bowContent, [-74.0, -72.8, -70.5, -66.0, -58.0]);
+  addHullEdgeRail(sternContent, [170.5, 178.0, 184.5, 189.0, 192.2, 194.1, 195.0]);
 
   const addHullBulwark = (targetGrp: THREE.Object3D, zList: number[], height = 1.06) => {
     const wallH = height - 0.08;
@@ -2026,13 +2049,13 @@ export function buildOlympicShip(
   trackProtoGeo(funnelFidleyProto.geometry);
 
   const funnelBandProto = buildCylinder('funnelBandProto', 2.74, 2.68, 3.6, 32);
-  funnelBandProto.material = darkIronMat;
+  funnelBandProto.material = funnelBandMat;
   trackProtoGeo(funnelBandProto.geometry);
 
   const funnelLipProto = buildTorusXY('funnelLipProto', 2.7, 0.14, 8, 32);
   funnelLipProto.rotation.x = Math.PI / 2;
   bakeTransform(funnelLipProto);
-  funnelLipProto.material = darkIronMat;
+  funnelLipProto.material = funnelLipMat;
   trackProtoGeo(funnelLipProto.geometry);
 
   const funnelFlueProto = buildDisc('funnelFlueProto', 2.5, 28);
@@ -2112,13 +2135,13 @@ export function buildOlympicShip(
     });
 
     const topBand = trackMesh(
-      fIdx === 0 ? funnelBandProto : cloneMeshWithMaterial(funnelBandProto, `fBand_${fIdx}`, darkIronMat),
+      fIdx === 0 ? funnelBandProto : cloneMeshWithMaterial(funnelBandProto, `fBand_${fIdx}`, funnelBandMat),
       funnelGroup,
     );
     topBand.position.y = 17.8;
 
     const topLip = trackMesh(
-      fIdx === 0 ? funnelLipProto : cloneMeshWithMaterial(funnelLipProto, `fLip_${fIdx}`, darkIronMat),
+      fIdx === 0 ? funnelLipProto : cloneMeshWithMaterial(funnelLipProto, `fLip_${fIdx}`, funnelLipMat),
       funnelGroup,
     );
     topLip.position.y = 19.62;
